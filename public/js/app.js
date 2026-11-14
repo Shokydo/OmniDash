@@ -2,14 +2,14 @@
 import { api } from './api.js';
 import { icon, logoMark } from './icons.js';
 import {
-  esc, toast, modal, confirmDialog, copy, fmtDuration, avatar, statusPill, setPageTitle,
+  esc, toast, modal, confirmDialog, copy, fmtDuration, avatar, statusPill, setPageTitle, serverIcon,
 } from './ui.js';
 import { loginView } from './views-auth.js';
 import { dashboardView } from './views-dashboard.js';
 import { serversView, openCreateServer } from './views-servers.js';
 import { serverView } from './views-server.js';
 import {
-  usersView, nodesView, allocationsView, eggsView, auditView, updatesView, settingsView, profileView,
+  usersView, rolesView, nodesView, allocationsView, eggsView, auditView, updatesView, settingsView, profileView,
 } from './views-admin.js';
 
 const S = {
@@ -22,6 +22,7 @@ const S = {
   sse: null,
   pending: null,
   serversCount: 0,
+  servers: [],
 };
 
 const NAV = [
@@ -38,6 +39,7 @@ const NAV = [
     admin: true,
     items: [
       { id: 'users', label: 'Пользователи', icon: 'users', href: '#/users' },
+      { id: 'roles', label: 'Роли', icon: 'shield', href: '#/roles' },
       { id: 'nodes', label: 'Узлы', icon: 'node', href: '#/nodes' },
       { id: 'allocations', label: 'Аллокации', icon: 'network', href: '#/allocations' },
       { id: 'eggs', label: 'Шаблоны', icon: 'package', href: '#/eggs' },
@@ -59,6 +61,7 @@ const ROUTES = {
   '/': 'dashboard',
   '/servers': 'servers',
   '/users': 'users',
+  '/roles': 'roles',
   '/nodes': 'nodes',
   '/allocations': 'allocations',
   '/eggs': 'eggs',
@@ -73,6 +76,7 @@ const VIEWS = {
   servers: serversView,
   server: serverView,
   users: usersView,
+  roles: rolesView,
   nodes: nodesView,
   allocations: allocationsView,
   eggs: eggsView,
@@ -82,7 +86,7 @@ const VIEWS = {
   profile: profileView,
 };
 
-const ADMIN_ROUTES = new Set(['users', 'nodes', 'allocations', 'eggs', 'audit', 'updates', 'settings']);
+const ADMIN_ROUTES = new Set(['users', 'roles', 'nodes', 'allocations', 'eggs', 'audit', 'updates', 'settings']);
 const isAdmin = () => S.me && S.me.role === 'admin';
 
 function applyAccent(color) {
@@ -143,7 +147,7 @@ function startApp() {
   <div class="app">
     <aside class="sidebar" id="sidebar">
       <div class="brand">
-        <span class="brand-mark">${logoMark(19)}</span>
+        <span class="brand-mark">${logoMark(32)}</span>
         <div>
           <div class="brand-name" id="brand-name">${esc(S.meta.name || 'OmniDash')}</div>
           <div class="brand-sub">control plane</div>
@@ -153,6 +157,14 @@ function startApp() {
         <button class="side-action" id="logout-btn" title="Выйти из панели">${icon('logout', 15)}<span>Выйти</span></button>
       </div>
       <nav class="nav" id="nav"></nav>
+      <div class="side-servers" id="side-servers">
+        <div class="side-servers-head">
+          <span>Серверы</span>
+          <span class="count" id="side-servers-count">0</span>
+        </div>
+        <div class="side-servers-list" id="side-servers-list"></div>
+        <button class="side-create" id="side-create">${icon('plus', 13)}<span>Создать сервер</span></button>
+      </div>
       <div class="sidebar-foot">
         <div class="version-chip" id="version-chip">
           <span class="live-dot" id="live-dot"></span>
@@ -195,6 +207,7 @@ function startApp() {
   document.getElementById('search-open').addEventListener('click', openPalette);
   document.getElementById('user-card').addEventListener('click', () => { location.hash = '#/profile'; });
   document.getElementById('logout-btn').addEventListener('click', () => logout());
+  document.getElementById('side-create').addEventListener('click', () => openCreateServer({ me: S.me, meta: S.meta, refresh: () => route() }));
   document.getElementById('profile-link').addEventListener('click', (e) => { e.preventDefault(); location.hash = '#/profile'; });
 
   if (!location.hash) location.hash = '#/';
@@ -243,9 +256,32 @@ function renderNav(hash = location.hash || '#/') {
 async function refreshServerCount() {
   try {
     const data = await api.get('/api/servers');
-    S.serversCount = (data.servers || []).length;
+    S.servers = data.servers || [];
+    S.serversCount = S.servers.length;
     renderNav();
+    renderSideServers();
   } catch { /* ignore */ }
+}
+
+function renderSideServers() {
+  const list = document.getElementById('side-servers-list');
+  const count = document.getElementById('side-servers-count');
+  if (!list) return;
+  if (count) count.textContent = String(S.servers.length);
+  const activeId = S.route && S.route.name === 'server' ? S.route.params.id : null;
+  if (!S.servers.length) {
+    list.innerHTML = '<div class="side-empty">Серверов нет</div>';
+    return;
+  }
+  list.innerHTML = S.servers.map((s) => `
+    <a class="side-server ${s.id === activeId ? 'active' : ''}" href="#/servers/${s.id}/console" title="${esc(s.name)}">
+      ${serverIcon(s, 'sm')}
+      <span class="ss-meta">
+        <span class="ss-name">${esc(s.name)}</span>
+        <span class="ss-sub">${esc((s.egg && s.egg.name) || 'сервер')}${s.allocation ? ` · :${esc(s.allocation.port)}` : ''}</span>
+      </span>
+      <span class="ss-dot ${esc(s.status)}" title="${esc(s.status)}"></span>
+    </a>`).join('');
 }
 
 /* ═════════════════════════════ роутер ═════════════════════════════ */
@@ -281,6 +317,7 @@ async function route() {
   }
   S.route = parsed;
   renderNav();
+  renderSideServers();
   renderCrumbs(parsed);
 
   const content = document.getElementById('content');

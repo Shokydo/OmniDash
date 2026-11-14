@@ -9,7 +9,7 @@ export function loginView(ctx) {
   <div class="auth">
     <section class="auth-art">
       <div class="auth-brand">
-        <span class="brand-mark">${logoMark(19)}</span>
+        <span class="brand-mark">${logoMark(32)}</span>
         <div>
           <div class="brand-name">${esc(meta.name || 'OmniDash')}</div>
           <div class="brand-sub">control plane</div>
@@ -42,7 +42,7 @@ export function loginView(ctx) {
           <span class="pm-gear" title="Панель">${icon('settings', 16)}</span>
         </div>
         <div class="auth-mobile-brand">
-          <span class="brand-mark">${logoMark(19)}</span>
+          <span class="brand-mark">${logoMark(32)}</span>
           <div><div class="brand-name">${esc(meta.name || 'OmniDash')}</div><div class="brand-sub">control plane</div></div>
         </div>
         <h2 id="auth-title">Вход в панель</h2>

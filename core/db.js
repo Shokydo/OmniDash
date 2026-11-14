@@ -45,6 +45,7 @@ const DEFAULT_DATA = () => ({
   },
   settings: { ...DEFAULT_SETTINGS },
   users: [],
+  roles: [],
   nodes: [],
   allocations: [],
   eggs: [],
@@ -88,6 +89,10 @@ function load() {
     try {
       const parsed = JSON.parse(raw);
       data = defaultsMerge(parsed, DEFAULT_DATA());
+      try {
+        const rolesCore = require('./roles');
+        if (rolesCore.ensureRoles(data)) save();
+      } catch { /* ignore */ }
     } catch (err) {
       const broken = path.join(DATA_DIR, `db.broken-${Date.now()}.json`);
       try { fs.copyFileSync(DB_FILE, broken); } catch { /* ignore */ }
@@ -98,6 +103,10 @@ function load() {
     data = DEFAULT_DATA();
   }
   if (!Array.isArray(data.users)) data.users = [];
+  try {
+    const rolesCore = require('./roles');
+    rolesCore.ensureRoles(data);
+  } catch { /* ignore */ }
   // миграция на чёрно-белую тему: старый цветной акцент -> белый
   if (data.settings && data.settings.accent === '#7c8cff') data.settings.accent = '#ffffff';
   data.meta.bootCount = Number(data.meta.bootCount || 0) + 1;

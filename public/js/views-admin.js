@@ -23,6 +23,11 @@ export async function usersView(ctx) {
   const data = await api.get('/api/users');
   const users = data.users || [];
   const defaults = data.defaults || {};
+  let roles = [];
+  try {
+    const rData = await api.get('/api/roles');
+    roles = rData.roles || [];
+  } catch { roles = []; }
   let search = '';
 
   const html = `
@@ -75,7 +80,7 @@ export async function usersView(ctx) {
             </div>
           </div>
         </td>
-        <td><span class="tag ${u.role}">${u.role === 'admin' ? 'админ' : 'пользователь'}</span></td>
+        <td><span class="tag ${u.role}">${esc(u.roleName || (u.role === 'admin' ? 'админ' : 'пользователь'))}</span></td>
         <td class="small"><b>${usage.servers || 0}</b> ${srvNames ? `<span class="dim">· ${esc(srvNames)}${(u.serverNames || []).length > 3 ? '…' : ''}</span>` : '<span class="dim">· нет серверов</span>'}</td>
         <td class="tiny dim">${u.lastLoginAt ? timeAgo(u.lastLoginAt) : 'никогда'}</td>
         <td class="right-cell"><div class="actions-cell">
@@ -128,6 +133,7 @@ export async function usersView(ctx) {
           <div class="field"><label>E-mail</label><input class="input" name="email" type="email" placeholder="user@example.com" /></div>
           <div class="field"><label>Пароль</label><input class="input" name="password" type="text" value="${Math.random().toString(36).slice(2, 10)}" /></div>
           <div class="field"><label>Роль</label><select class="select" name="role"><option value="user">Пользователь</option><option value="admin">Администратор</option></select></div>
+          <div class="field"><label>Кастомная роль</label><select class="select" name="roleId"><option value="">— без кастомной роли —</option>${roles.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('')}</select></div>
         </div>
         <div class="notice">${icon('info', 16)}<div>Лимиты задаются на каждом сервере (вкладка «Настройки» сервера). У пользователя — только аккаунт, роль и список подключённых серверов.</div></div>
       </form>`,
@@ -137,7 +143,7 @@ export async function usersView(ctx) {
           const form = overlay.querySelector('#user-form');
           const v = serializeForm(form);
           try {
-            await api.post('/api/users', { username: v.username, email: v.email, password: v.password, role: v.role });
+            await api.post('/api/users', { username: v.username, email: v.email, password: v.password, role: v.role, roleId: v.roleId || null });
             toast('Пользователь создан', v.username, 'ok');
             close();
             ctx.refresh();
@@ -161,6 +167,10 @@ export async function usersView(ctx) {
               <option value="user" ${user.role === 'user' ? 'selected' : ''}>Пользователь</option>
               <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Администратор</option>
             </select></div>
+            <div class="field"><label>Кастомная роль</label><select class="select" name="roleId">
+              <option value="">— без кастомной роли —</option>
+              ${roles.map((r) => `<option value="${esc(r.id)}" ${user.roleId === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}
+            </select></div>
           </div>
           <div class="notice">${icon('info', 16)}<div>Лимиты задаются на каждом сервере (вкладка «Настройки» сервера).</div></div>
           <div class="row">
@@ -182,7 +192,7 @@ export async function usersView(ctx) {
           e.preventDefault();
           const v = serializeForm(form);
           try {
-            await api.patch(`/api/users/${user.id}`, { email: v.email, role: v.role });
+            await api.patch(`/api/users/${user.id}`, { email: v.email, role: v.role, roleId: v.roleId || null });
             toast('Сохранено', '', 'ok');
             close();
             ctx.refresh();
@@ -250,6 +260,111 @@ export async function usersView(ctx) {
       return () => { };
     },
     title: 'Пользователи',
+  };
+}
+
+/* ═════════════════════════════ роли ═════════════════════════════ */
+
+export async function rolesView(ctx) {
+  const data = await api.get('/api/roles');
+  const roles = data.roles || [];
+  const permissions = data.permissions || [];
+
+  const html = `
+  <div class="page">
+    <div class="page-head">
+      <div>
+        <div class="eyebrow">администрирование</div>
+        <h1>Роли</h1>
+        <p class="sub">Наборы разрешений для панели. Назначаются пользователям в разделе «Пользователи». Встроенные роли удалить нельзя.</p>
+      </div>
+      <div class="page-actions">
+        <button class="btn primary" id="create-role">${icon('plus', 15)} Создать роль</button>
+      </div>
+    </div>
+    <div class="card table-wrap">
+      <table class="table">
+        <thead><tr><th>Роль</th><th>Разрешений</th><th>Тип</th><th></th></tr></thead>
+        <tbody id="roles-body"></tbody>
+      </table>
+    </div>
+  </div>`;
+
+  function permCheckboxes(selected = []) {
+    return permissions.map((p) => `
+      <label class="switch" style="display:flex;align-items:center;gap:8px;padding:6px 0">
+        <input type="checkbox" name="perm_${esc(p.id)}" ${selected.includes(p.id) ? 'checked' : ''} />
+        <span class="switch-text">${esc(p.label)} <span class="mono dim" style="font-weight:400">${esc(p.id)}</span></span>
+      </label>`).join('');
+  }
+
+  function roleForm(role) {
+    const isNew = !role;
+    modal({
+      title: isNew ? 'Новая роль' : `Роль ${role.name}`,
+      subtitle: isNew ? 'Выберите разрешения для новой роли.' : 'Измените название и разрешения.',
+      wide: true,
+      body: `<form class="stack" id="role-form">
+        <div class="field"><label>Название роли</label><input class="input" name="name" value="${esc(role ? role.name : '')}" placeholder="Модератор, Хелпер…" required /></div>
+        <div>
+          <div class="label" style="margin-bottom:6px">Разрешения</div>
+          ${permCheckboxes(role ? role.permissions : [])}
+        </div>
+      </form>`,
+      footer: `<button class="btn" data-close>Отмена</button><button class="btn primary" id="role-ok">${icon('save', 14)} Сохранить</button>`,
+      onMount: (overlay, close) => {
+        overlay.querySelector('#role-ok').addEventListener('click', async () => {
+          const form = overlay.querySelector('#role-form');
+          const v = serializeForm(form);
+          const perms = permissions.filter((p) => v[`perm_${p.id}`]).map((p) => p.id);
+          try {
+            if (isNew) await api.post('/api/roles', { name: v.name, permissions: perms });
+            else await api.patch(`/api/roles/${role.id}`, { name: v.name, permissions: perms });
+            toast('Роль сохранена', v.name, 'ok');
+            close();
+            ctx.refresh();
+          } catch (err) { toast('Ошибка', err.message, 'err'); }
+        });
+      },
+    });
+  }
+
+  function renderRows(host) {
+    host.innerHTML = roles.map((r) => `
+      <tr>
+        <td><b>${esc(r.name)}</b>${r.builtin ? ' <span class="tag user">встроенная</span>' : ''}</td>
+        <td class="small">${(r.permissions || []).length} из ${permissions.length}</td>
+        <td class="tiny dim">${esc((r.permissions || []).slice(0, 3).join(', '))}${(r.permissions || []).length > 3 ? '…' : ''}</td>
+        <td class="right-cell"><div class="actions-cell">
+          <button class="btn sm ghost" data-edit-role="${esc(r.id)}" title="Изменить">${icon('edit', 13)}</button>
+          ${!r.builtin ? `<button class="btn sm ghost danger" data-del-role="${esc(r.id)}" title="Удалить">${icon('trash', 13)}</button>` : ''}
+        </div></td>
+      </tr>`).join('') || `<tr><td colspan="4">${emptyState('shield', 'Ролей нет', 'Создайте первую роль.')}</td></tr>`;
+    host.querySelectorAll('[data-edit-role]').forEach((btn) => {
+      btn.addEventListener('click', () => roleForm(roles.find((r) => r.id === btn.dataset.editRole)));
+    });
+    host.querySelectorAll('[data-del-role]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const role = roles.find((r) => r.id === btn.dataset.delRole);
+        const ok = await confirmDialog({ title: `Удалить роль ${role.name}?`, text: 'Если роль назначена пользователям, удаление будет отклонено.', confirmText: 'Удалить', danger: true });
+        if (!ok) return;
+        try {
+          await api.del(`/api/roles/${role.id}`);
+          toast('Роль удалена', role.name, 'ok');
+          ctx.refresh();
+        } catch (err) { toast('Ошибка', err.message, 'err'); }
+      });
+    });
+  }
+
+  return {
+    html,
+    mount(root) {
+      renderRows(root.querySelector('#roles-body'));
+      root.querySelector('#create-role').addEventListener('click', () => roleForm(null));
+      return () => { };
+    },
+    title: 'Роли',
   };
 }
 

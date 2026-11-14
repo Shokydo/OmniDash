@@ -334,11 +334,28 @@ export const expiryChip = (days) => {
   return `<span class="chip expiry-chip ${tone}" title="Срок аренды">${icon('calendar', 12)}<span>${days < 0 ? `просрочен` : `осталось ${days} дн`}</span></span>`;
 };
 
-export const fileToDataUrl = (file, maxBytes = 2 * 1024 * 1024) => new Promise((resolve, reject) => {
+export const fileToDataUrl = (file, maxBytes = 8 * 1024 * 1024) => new Promise((resolve, reject) => {
   if (!file) return reject(new Error('Файл не выбран'));
   if (file.size > maxBytes) return reject(new Error(`Файл слишком большой (макс. ${Math.round(maxBytes / 1024 / 1024)} МБ)`));
+  if (!String(file.type || '').startsWith('image/')) return reject(new Error('Нужна картинка (png, jpg, webp)'));
   const reader = new FileReader();
-  reader.onload = () => resolve(reader.result);
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const size = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const side = Math.min(img.width, img.height);
+      const sx = (img.width - side) / 2;
+      const sy = (img.height - side) / 2;
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+      resolve(canvas.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => reject(new Error('Не удалось прочитать картинку'));
+    img.src = reader.result;
+  };
   reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
   reader.readAsDataURL(file);
 });

@@ -193,6 +193,7 @@ function publicUser(u) {
     username: u.username,
     email: u.email,
     role: u.role,
+    roleId: u.roleId || null,
     suspended: !!u.suspended,
     createdAt: u.createdAt,
     lastLoginAt: u.lastLoginAt || null,

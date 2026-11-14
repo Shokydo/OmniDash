@@ -144,6 +144,35 @@ function isAdmin(user) {
   return !!user && user.role === 'admin';
 }
 
+function hasPerm(user, perm) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  try {
+    const rolesCore = require('./roles');
+    return rolesCore.hasPerm(db.data, user, perm);
+  } catch {
+    return false;
+  }
+}
+
+function permissionsOf(user) {
+  if (!user) return [];
+  if (user.role === 'admin') {
+    try {
+      const rolesCore = require('./roles');
+      return rolesCore.ALL.slice();
+    } catch {
+      return [];
+    }
+  }
+  try {
+    const rolesCore = require('./roles');
+    return rolesCore.permissionsOf(db.data, user);
+  } catch {
+    return [];
+  }
+}
+
 module.exports = {
   COOKIE,
   hashPassword,
@@ -158,4 +187,6 @@ module.exports = {
   publicKey,
   authenticate,
   isAdmin,
+  hasPerm,
+  permissionsOf,
 };

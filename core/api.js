@@ -17,6 +17,8 @@ const daemonCore = require('./daemon');
 const filesCore = require('./files');
 const backupsCore = require('./backups');
 const eggsCore = require('./eggs');
+const kernelsCore = require('./kernels');
+const rolesCore = require('./roles');
 const { makeTask, ACTIONS } = require('./scheduler');
 
 const STATUSES = daemonCore.STATUS;
@@ -170,8 +172,11 @@ function serverJson(server, user, daemon) {
 function userJson(user, { withServers = false } = {}) {
   const usage = serversCore.usageOf(user.id);
   const owned = serversCore.ownedServers(user.id);
+  const roleObj = user.roleId ? rolesCore.roleById(db.data, user.roleId) : null;
   const out = {
     ...publicUser(user),
+    roleName: roleObj ? roleObj.name : (user.role === 'admin' ? 'Администратор' : 'Пользователь'),
+    permissions: rolesCore.permissionsOf(db.data, user),
     limits: { ...db.data.settings.defaultLimits, ...(user.limits || {}) },
     usage,
     apiKeys: (user.apiKeys || []).map(auth.publicKey),
@@ -496,14 +501,14 @@ function createApi(deps) {
       accent: db.data.settings.accent,
       compact: db.data.settings.compact,
     },
-    roles: { admin: auth.isAdmin(ctx.user) },
+    roles: { admin: auth.isAdmin(ctx.user), permissions: auth.permissionsOf(ctx.user) },
   }));
 
   route('PATCH', '/api/auth/me', (ctx) => {
     const body = ctx.body || {};
     if (body.email !== undefined) ctx.user.email = String(body.email).slice(0, 120);
     if (body.avatarColor) ctx.user.avatarColor = String(body.avatarColor).slice(0, 20);
-    if (body.avatarImage !== undefined) ctx.user.avatarImage = body.avatarImage ? String(body.avatarImage).slice(0, 300000) : null;
+    if (body.avatarImage !== undefined) ctx.user.avatarImage = body.avatarImage ? String(body.avatarImage).slice(0, 600000) : null;
     if (body.currentPassword || body.newPassword) {
       if (!auth.verifyPassword(String(body.currentPassword || ''), ctx.user)) throw bad('Текущий пароль неверен');
       if (String(body.newPassword || '').length < 8) throw bad('Новый пароль минимум 8 символов');
@@ -600,6 +605,50 @@ function createApi(deps) {
     };
   });
 
+  /* ─────────── ядра Minecraft (внешняя подгрузка) ─────────── */
+  route('GET', '/api/kernels', () => ({ kernels: kernelsCore.catalog() }));
+
+  route('GET', '/api/kernels/:id/versions', async (ctx) => {
+    try {
+      const versions = await kernelsCore.versions(ctx.params.id);
+      return { versions };
+    } catch (err) {
+      throw bad(err.message);
+    }
+  });
+
+  route('POST', '/api/kernels/install', async (ctx) => {
+    const body = ctx.body || {};
+    const server = body.serverId ? db.serverById(body.serverId) : null;
+    if (server) {
+      permit(ctx.user, server, 'settings');
+    } else if (!auth.isAdmin(ctx.user)) {
+      throw forbidden('Для установки ядра без сервера нужен доступ администратора');
+    }
+    const dir = server ? db.serverDir(server.id) : require('path').join(require('os').tmpdir(), 'omnidash-kernel-' + Date.now());
+    try {
+      const result = await kernelsCore.installToDir({
+        kernel: body.kernel || 'paper',
+        version: body.version || null,
+        customUrl: body.customUrl || null,
+        customName: body.customName || null,
+        dir,
+      });
+      if (server) {
+        // обновить стартовую команду на java -jar (только админ меняет команду)
+        if (auth.isAdmin(ctx.user)) {
+          const isProxy = result.kernel === 'velocity' || result.kernel === 'waterfall';
+          server.startupOverride = `java -Xms512M -Xmx{{MEMORY}}M -jar ${result.jar}${isProxy ? '' : ' nogui'}`;
+          db.save();
+        }
+        db.audit({ action: 'server.kernel.install', actorId: ctx.user.id, actorName: ctx.user.username, target: server.name, meta: result });
+      }
+      return { ...result, dir: server ? undefined : dir };
+    } catch (err) {
+      throw bad(err.message);
+    }
+  });
+
   route('POST', '/api/servers', (ctx) => {
     const body = ctx.body || {};
     const isAdmin = auth.isAdmin(ctx.user);
@@ -678,7 +727,7 @@ function createApi(deps) {
       server.name = name;
     }
     if (body.description !== undefined) server.description = String(body.description).slice(0, 500);
-    if (body.avatarImage !== undefined) server.avatarImage = body.avatarImage ? String(body.avatarImage).slice(0, 300000) : null;
+    if (body.avatarImage !== undefined) server.avatarImage = body.avatarImage ? String(body.avatarImage).slice(0, 600000) : null;
     if (body.avatarColor !== undefined) server.avatarColor = body.avatarColor ? String(body.avatarColor).slice(0, 20) : null;
     if (body.autoStart !== undefined) server.autoStart = !!body.autoStart;
     if (body.notes !== undefined) server.notes = String(body.notes).slice(0, 2000);
@@ -1239,6 +1288,48 @@ function createApi(deps) {
     return task;
   });
 
+  /* ─────────── роли (админ) ─────────── */
+  route('GET', '/api/roles', (ctx) => {
+    adminOnly(ctx.user);
+    return { roles: (db.data.roles || []).map(rolesCore.publicRole), permissions: rolesCore.PERMISSIONS };
+  });
+
+  route('POST', '/api/roles', (ctx) => {
+    adminOnly(ctx.user);
+    try {
+      const role = rolesCore.createRole(db.data, ctx.body || {});
+      db.save();
+      db.audit({ action: 'role.create', actorId: ctx.user.id, actorName: ctx.user.username, target: role.name });
+      return rolesCore.publicRole(role);
+    } catch (err) {
+      throw bad(err.message);
+    }
+  });
+
+  route('PATCH', '/api/roles/:id', (ctx) => {
+    adminOnly(ctx.user);
+    try {
+      const role = rolesCore.updateRole(db.data, ctx.params.id, ctx.body || {});
+      db.save();
+      db.audit({ action: 'role.update', actorId: ctx.user.id, actorName: ctx.user.username, target: role.name });
+      return rolesCore.publicRole(role);
+    } catch (err) {
+      throw bad(err.message);
+    }
+  });
+
+  route('DELETE', '/api/roles/:id', (ctx) => {
+    adminOnly(ctx.user);
+    try {
+      const role = rolesCore.deleteRole(db.data, ctx.params.id);
+      db.save();
+      db.audit({ action: 'role.delete', actorId: ctx.user.id, actorName: ctx.user.username, target: role.name });
+      return { removed: true };
+    } catch (err) {
+      throw bad(err.message);
+    }
+  });
+
   /* ─────────── пользователи (админ) ─────────── */
   route('GET', '/api/users', (ctx) => {
     adminOnly(ctx.user);
@@ -1264,7 +1355,7 @@ function createApi(deps) {
 
   route('POST', '/api/users', (ctx) => {
     adminOnly(ctx.user);
-    const { username, email, password, role, limits } = ctx.body || {};
+    const { username, email, password, role, roleId, limits } = ctx.body || {};
     const name = String(username || '').trim();
     if (!/^[a-zA-Z0-9_.-]{3,24}$/.test(name)) throw bad('Логин: 3–24 символа, латиница, цифры, _ . -');
     if (db.userByName(name)) throw conflict('Такой логин уже занят');
@@ -1273,9 +1364,11 @@ function createApi(deps) {
       username: name,
       email: String(email || '').slice(0, 120),
       role: role === 'admin' ? 'admin' : 'user',
+      roleId: roleId || null,
       ...auth.hashPassword(String(password)),
       limits: limits || {},
     });
+    if (user.roleId && !rolesCore.roleById(db.data, user.roleId)) user.roleId = null;
     db.audit({ action: 'user.create', actorId: ctx.user.id, actorName: ctx.user.username, target: user.username, meta: { role: user.role } });
     return userJson(user);
   });
@@ -1288,6 +1381,10 @@ function createApi(deps) {
     if (body.email !== undefined) user.email = String(body.email).slice(0, 120);
     if (body.role !== undefined && user.id !== ctx.user.id) {
       user.role = body.role === 'admin' ? 'admin' : 'user';
+    }
+    if (body.roleId !== undefined) {
+      user.roleId = body.roleId || null;
+      if (user.roleId && !rolesCore.roleById(db.data, user.roleId)) user.roleId = null;
       db.audit({ action: 'user.role', actorId: ctx.user.id, actorName: ctx.user.username, target: user.username, meta: { role: user.role } });
     }
     if (body.limits && typeof body.limits === 'object') {

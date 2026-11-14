@@ -196,6 +196,11 @@ export async function openCreateServer(ctx, opts = {}) {
     ctx.me.role === 'admin' ? api.get('/api/users').catch(() => ({ users: [] })) : Promise.resolve({ users: [] }),
   ]);
   const eggs = eggsData.eggs || [];
+  let kernels = [];
+  try {
+    const kData = await api.get('/api/kernels');
+    kernels = kData.kernels || [];
+  } catch { kernels = []; }
   const localNodes = (nodesData.nodes || []).filter((n) => n.local);
   const users = usersData.users || [];
   const limits = ctx.me.limits || {};
@@ -219,6 +224,23 @@ export async function openCreateServer(ctx, opts = {}) {
         <select class="select" name="eggId">
           ${eggs.map((e) => `<option value="${e.id}" ${e.key === 'paper' ? 'selected' : ''}>${esc(e.name)} · ${esc(e.category)}</option>`).join('')}
         </select>
+      </div>
+      <div class="field span-2">
+        <label>Ядро Minecraft <span class="dim">— подгрузка из внешнего API</span></label>
+        <div class="row" style="gap:8px">
+          <select class="select" name="kernel" id="cs-kernel" style="flex:1">
+            <option value="">Без ядра (демо-шаблон)</option>
+            ${kernels.map((k) => `<option value="${esc(k.id)}">${esc(k.label)} · ${esc(k.group)}${k.recommended ? ' ★' : ''}</option>`).join('')}
+          </select>
+          <select class="select" name="kernelVersion" id="cs-kernel-version" style="flex:1" disabled>
+            <option value="">Сначала выберите ядро</option>
+          </select>
+        </div>
+        <div class="row" style="gap:8px;margin-top:8px" id="cs-custom-row" hidden>
+          <input class="input mono" name="customUrl" placeholder="https://…/server.jar" style="flex:1" />
+          <input class="input mono" name="customName" placeholder="имя.jar" style="width:150px" />
+        </div>
+        <span class="hint" id="cs-kernel-hint">Версии подгружаются с fill.papermc.io / api.purpurmc.org / meta.fabricmc.net / piston-meta.mojang.com. Jar скачается в каталог сервера при создании.</span>
       </div>
       ${ctx.me.role === 'admin' && localNodes.length ? `
       <div class="field">
@@ -265,6 +287,36 @@ export async function openCreateServer(ctx, opts = {}) {
     footer: `<button class="btn" data-close>Отмена</button><button class="btn primary" data-create>${icon('plus', 15)} Создать сервер</button>`,
     onMount: (overlay) => {
       const form = overlay.querySelector('[data-create-server]');
+      const kernelSelect = overlay.querySelector('#cs-kernel');
+      const versionSelect = overlay.querySelector('#cs-kernel-version');
+      const customRow = overlay.querySelector('#cs-custom-row');
+      const kernelHint = overlay.querySelector('#cs-kernel-hint');
+      if (kernelSelect) {
+        kernelSelect.addEventListener('change', async () => {
+          const kernelId = kernelSelect.value;
+          customRow.hidden = kernelId !== 'custom';
+          versionSelect.disabled = true;
+          versionSelect.innerHTML = '<option value="">Загрузка версий…</option>';
+          if (!kernelId || kernelId === 'custom') {
+            versionSelect.innerHTML = kernelId === 'custom' ? '<option value="">Своя ссылка — версия не нужна</option>' : '<option value="">Сначала выберите ядро</option>';
+            if (kernelId === 'custom') kernelHint.textContent = 'Укажите прямую ссылку на jar и его имя.';
+            return;
+          }
+          const kernel = kernels.find((k) => k.id === kernelId);
+          if (kernel) kernelHint.textContent = kernel.hint || '';
+          try {
+            const res = await api.get(`/api/kernels/${kernelId}/versions`);
+            const versions = res.versions || [];
+            versionSelect.innerHTML = versions.length
+              ? versions.map((v) => `<option value="${esc(v.id)}">${esc(v.id)}${v.java ? ` · Java ${v.java}` : ''}</option>`).join('')
+              : '<option value="">Версий нет</option>';
+            versionSelect.disabled = !versions.length;
+          } catch (err) {
+            versionSelect.innerHTML = '<option value="">Не удалось загрузить версии</option>';
+            kernelHint.textContent = `Ошибка загрузки версий: ${err.message}`;
+          }
+        });
+      }
       overlay.querySelector('[data-create]').addEventListener('click', async () => {
         const btn = overlay.querySelector('[data-create]');
         const values = serializeForm(form);
@@ -286,6 +338,22 @@ export async function openCreateServer(ctx, opts = {}) {
             description: values.description,
             start: !!values.startNow,
           });
+          const kernelId = values.kernel;
+          if (kernelId) {
+            try {
+              toast('Скачиваю ядро', `${kernelId} ${values.kernelVersion || ''}…`, 'info');
+              const installed = await api.post('/api/kernels/install', {
+                serverId: server.id,
+                kernel: kernelId,
+                version: values.kernelVersion || null,
+                customUrl: values.customUrl || null,
+                customName: values.customName || null,
+              });
+              toast('Ядро установлено', `${installed.jar} — команда запуска обновлена`, 'ok');
+            } catch (err) {
+              toast('Ядро не скачалось', err.message, 'warn');
+            }
+          }
           toast('Сервер создан', `${server.name} · порт ${server.allocation ? server.allocation.port : '—'}`, 'ok');
           close();
           window.location.hash = `#/servers/${server.id}/console`;
