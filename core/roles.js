@@ -41,7 +41,7 @@ function builtinRoles() {
       id: 'role_user',
       name: 'Пользователь',
       builtin: true,
-      permissions: ['servers.create', 'servers.manage'],
+      permissions: ['servers.manage'],
       createdAt: Date.now(),
     },
   ];
@@ -64,7 +64,7 @@ function permissionsOf(data, user) {
   if (user.role === 'admin') return ALL.slice();
   const role = roleById(data, user.roleId);
   if (role) return (role.permissions || []).filter((p) => ALL.includes(p));
-  if (user.role === 'user') return ['servers.create', 'servers.manage'];
+  if (user.role === 'user') return ['servers.manage'];
   return [];
 }
 

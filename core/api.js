@@ -650,6 +650,7 @@ function createApi(deps) {
   });
 
   route('POST', '/api/servers', (ctx) => {
+    if (!auth.hasPerm(ctx.user, 'servers.create')) throw forbidden('Создание серверов доступно только администраторам');
     const body = ctx.body || {};
     const isAdmin = auth.isAdmin(ctx.user);
     const owner = isAdmin && body.ownerId ? db.userById(body.ownerId) : ctx.user;

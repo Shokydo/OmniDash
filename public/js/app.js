@@ -192,7 +192,12 @@ function startApp() {
   document.getElementById('nav')?.addEventListener('click', () => document.body.classList.remove('nav-open'));
   document.getElementById('search-open')?.addEventListener('click', openPalette);
   document.getElementById('logout-btn')?.addEventListener('click', () => logout());
-  document.getElementById('side-create')?.addEventListener('click', () => openCreateServer({ me: S.me, meta: S.meta, refresh: () => route() }));
+  const sideCreate = document.getElementById('side-create');
+  const canCreate = isAdmin() || ((S.me.permissions || []).includes('servers.create'));
+  if (sideCreate) {
+    if (!canCreate) sideCreate.style.display = 'none';
+    else sideCreate.addEventListener('click', () => openCreateServer({ me: S.me, meta: S.meta, refresh: () => route() }));
+  }
   document.getElementById('profile-link')?.addEventListener('click', (e) => { e.preventDefault(); location.hash = '#/profile'; });
 
   if (!location.hash) location.hash = '#/';
@@ -335,7 +340,7 @@ async function route() {
       if (settings.accent) { S.meta.accent = settings.accent; applyAccent(settings.accent); }
       if (settings.panelName) { S.meta.name = settings.panelName; renderUserChrome(); }
     },
-    canCreateServer: isAdmin() || ((S.me.limits && S.me.limits.servers) > (S.me.usage && S.me.usage.servers)),
+    canCreateServer: isAdmin() || ((S.me.permissions || []).includes('servers.create')),
   };
 
   try {
@@ -488,7 +493,7 @@ function openPalette() {
       { label: 'Журнал действий', group: 'Перейти', icon: 'activity', run: () => { location.hash = '#/audit'; } },
       { label: 'Обновления', group: 'Перейти', icon: 'cloudDownload', run: () => { location.hash = '#/updates'; } },
       { label: 'Настройки панели', group: 'Перейти', icon: 'settings', run: () => { location.hash = '#/settings'; } },
-      { label: 'Создать сервер', group: 'Действие', icon: 'plus', run: () => openCreateServer(currentCtx()) },
+      ...((isAdmin() || ((S.me.permissions || []).includes('servers.create'))) ? [{ label: 'Создать сервер', group: 'Действие', icon: 'plus', run: () => openCreateServer(currentCtx()) }] : []),
       { label: 'Создать пользователя', group: 'Действие', icon: 'user', run: () => { location.hash = '#/users'; S.pending = '#create-user'; } },
     ] : [
       { label: 'Профиль', group: 'Перейти', icon: 'user', run: () => { location.hash = '#/profile'; } },
