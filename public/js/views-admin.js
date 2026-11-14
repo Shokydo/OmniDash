@@ -7,6 +7,7 @@ import {
 } from './ui.js';
 import { actionMeta, TONE_COLORS } from './labels.js';
 import { openCreateServer } from './views-servers.js';
+import { THEMES, SOUND_PACKS, prefs, applyTheme, Sound } from './theme.js';
 
 const LIMIT_FIELDS = [
   ['servers', 'Серверы', 'шт'],
@@ -1092,6 +1093,37 @@ export async function settingsView(ctx) {
         </div>
 
         <div class="form-section">
+          <h3>Темы, стили и звуки</h3>
+          <p class="hint">Как в OmniPanel: темы, скругления, плотность и звуковые наборы. Применяются сразу, хранятся в браузере.</p>
+          <div class="stack">
+            <div class="field"><label>Тема</label>
+              <div class="row wrap" style="gap:6px" id="theme-grid">
+                ${Object.entries(THEMES).map(([key, th]) => `<button type="button" class="theme-cell ${prefs.theme === key ? 'active' : ''}" data-theme="${key}" title="${esc(th.label)}"><span class="theme-swatch" style="background:${th.bg};border-color:${th.accent}"></span><span>${esc(th.label)}</span></button>`).join('')}
+              </div>
+            </div>
+            <div id="custom-colors" class="${prefs.theme === 'custom' ? '' : 'hidden'}">
+              <div class="label" style="margin-bottom:6px">Цвета кастомной темы</div>
+              <div class="form-grid">
+                <div class="field"><label>Фон</label><input class="input mono" type="color" name="cBg" value="${esc(prefs.custom.bg)}" /></div>
+                <div class="field"><label>Панель</label><input class="input mono" type="color" name="cPanel" value="${esc(prefs.custom.panel)}" /></div>
+                <div class="field"><label>Текст</label><input class="input mono" type="color" name="cText" value="${esc(prefs.custom.text)}" /></div>
+                <div class="field"><label>Акцент</label><input class="input mono" type="color" name="cAccent" value="${esc(prefs.custom.accent)}" /></div>
+              </div>
+            </div>
+            <div class="form-grid">
+              <div class="field"><label>Скругления</label><select class="select" name="radius"><option value="soft" ${prefs.radius === 'soft' ? 'selected' : ''}>Мягкие</option><option value="square" ${prefs.radius === 'square' ? 'selected' : ''}>Квадратные</option><option value="round" ${prefs.radius === 'round' ? 'selected' : ''}>Круглые</option></select></div>
+              <div class="field"><label>Плотность</label><select class="select" name="density"><option value="normal" ${prefs.density === 'normal' ? 'selected' : ''}>Обычная</option><option value="compact" ${prefs.density === 'compact' ? 'selected' : ''}>Компактная</option><option value="comfortable" ${prefs.density === 'comfortable' ? 'selected' : ''}>Свободная</option></select></div>
+              <div class="field"><label>Эффект от клика</label><select class="select" name="clickFx"><option value="wave" ${prefs.clickFx === 'wave' ? 'selected' : ''}>Волна</option><option value="dot" ${prefs.clickFx === 'dot' ? 'selected' : ''}>Точка</option><option value="ring" ${prefs.clickFx === 'ring' ? 'selected' : ''}>Кольцо</option><option value="cross" ${prefs.clickFx === 'cross' ? 'selected' : ''}>Крест</option><option value="off" ${prefs.clickFx === 'off' ? 'selected' : ''}>Выкл</option></select></div>
+              <div class="field"><label>Набор звуков</label><select class="select" name="soundPack">${Object.entries(SOUND_PACKS).map(([k, v]) => `<option value="${k}" ${prefs.soundPack === k ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select></div>
+            </div>
+            <label class="switch"><input type="checkbox" name="sound" ${prefs.sound ? 'checked' : ''}/><span class="track"></span><span class="switch-text">Звуки интерфейса</span></label>
+            <label class="switch"><input type="checkbox" name="fx" ${prefs.fx ? 'checked' : ''}/><span class="track"></span><span class="switch-text">Визуальные эффекты</span></label>
+            <div class="field"><label>Громкость</label><input class="input" type="range" name="volume" min="0" max="100" value="${Math.round(prefs.volume * 100)}" /></div>
+            <div class="row"><button class="btn sm" type="button" id="sound-test">${icon('play', 13)} Проверить звук</button></div>
+          </div>
+        </div>
+
+        <div class="form-section">
           <h3>Обновления и вид</h3>
           <p class="hint">Автообновление интерфейса и акцентный цвет.</p>
           <div class="stack">
@@ -1119,6 +1151,41 @@ export async function settingsView(ctx) {
   return {
     html,
     mount(root) {
+      root.querySelectorAll('[data-theme]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          prefs.theme = btn.dataset.theme;
+          prefs.save();
+          applyTheme();
+          root.querySelectorAll('[data-theme]').forEach((b) => b.classList.toggle('active', b.dataset.theme === prefs.theme));
+          root.querySelector('#custom-colors').classList.toggle('hidden', prefs.theme !== 'custom');
+          Sound.play('ok');
+        });
+      });
+      root.querySelectorAll('#custom-colors input[type="color"]').forEach((input) => {
+        input.addEventListener('input', () => {
+          const map = { cBg: 'bg', cPanel: 'panel', cText: 'text', cAccent: 'accent' };
+          prefs.custom[map[input.name]] = input.value;
+          prefs.save();
+          applyTheme();
+        });
+      });
+      const radiusSel = root.querySelector('select[name="radius"]');
+      if (radiusSel) radiusSel.addEventListener('change', () => { prefs.radius = radiusSel.value; prefs.save(); applyTheme(); });
+      const densitySel = root.querySelector('select[name="density"]');
+      if (densitySel) densitySel.addEventListener('change', () => { prefs.density = densitySel.value; prefs.save(); applyTheme(); });
+      const clickFxSel = root.querySelector('select[name="clickFx"]');
+      if (clickFxSel) clickFxSel.addEventListener('change', () => { prefs.clickFx = clickFxSel.value; prefs.save(); });
+      const packSel = root.querySelector('select[name="soundPack"]');
+      if (packSel) packSel.addEventListener('change', () => { prefs.soundPack = packSel.value; prefs.save(); Sound.play('ok'); });
+      const soundChk = root.querySelector('input[name="sound"]');
+      if (soundChk) soundChk.addEventListener('change', () => { prefs.sound = soundChk.checked; prefs.save(); if (prefs.sound) Sound.play('ok'); });
+      const fxChk = root.querySelector('input[name="fx"]');
+      if (fxChk) fxChk.addEventListener('change', () => { prefs.fx = fxChk.checked; prefs.save(); });
+      const volInput = root.querySelector('input[name="volume"]');
+      if (volInput) volInput.addEventListener('input', () => { prefs.volume = Number(volInput.value) / 100; prefs.save(); });
+      const soundTest = root.querySelector('#sound-test');
+      if (soundTest) soundTest.addEventListener('click', () => Sound.play('ok'));
+
       root.querySelectorAll('[data-accent]').forEach((btn) => {
         btn.addEventListener('click', () => {
           const input = root.querySelector('input[name="accent"]');

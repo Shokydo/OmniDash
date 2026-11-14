@@ -3,7 +3,7 @@ import { api } from './api.js';
 import { icon } from './icons.js';
 import {
   esc, fmtBytes, fmtMb, fmtDateTime, timeAgo, avatar, emptyState, modal, toast,
-  confirmDialog, serializeForm, statusPill, meter,
+  confirmDialog, serializeForm, statusPill, meter, fileToDataUrl, serverIcon,
 } from './ui.js';
 
 const permLabels = {
@@ -487,6 +487,31 @@ export async function settingsTab(ctx, data) {
       </form>
 
       <div class="card">
+        <div class="card-head"><div class="panel-title">${icon('image', 15)} Оформление сервера</div></div>
+        <div class="card-body stack">
+          <div class="row" style="gap:12px">
+            <span id="server-icon-preview">${serverIcon(server)}</span>
+            <div class="grow">
+              <div class="small"><b>${esc(server.name)}</b></div>
+              <div class="tiny dim">Иконка сервера в списках и карточках. Меняется сразу.</div>
+            </div>
+          </div>
+          <div>
+            <div class="label" style="margin-bottom:8px">Цвет иконки</div>
+            <div class="row wrap" style="gap:6px">
+              ${['#262626', '#404040', '#595959', '#737373', '#8c8c8c', '#a6a6a6', '#ffffff'].map((c) => `<button type="button" class="icon-btn" data-server-color="${c}" title="${c}" style="width:26px;height:26px;border-radius:3px;background:${c};border:2px solid ${server.avatarColor === c ? '#fff' : 'transparent'}"></button>`).join('')}
+            </div>
+          </div>
+          <div class="row wrap" style="gap:8px">
+            <label class="btn sm" for="server-avatar-file" style="cursor:pointer">${icon('image', 13)} Загрузить картинку</label>
+            <input type="file" id="server-avatar-file" accept="image/*" hidden />
+            ${server.avatarImage ? '<button class="btn sm ghost danger" type="button" id="server-avatar-remove">Убрать картинку</button>' : ''}
+          </div>
+          <div class="hint">Картинка сжимается до 256×256. Ставится сразу на server-icon сервера.</div>
+        </div>
+      </div>
+
+      <div class="card">
         <div class="card-head"><div class="panel-title">${icon('network', 15)} Порты и аллокации</div><span class="chip">${assigned.length} / ${(ctx.me.limits && ctx.me.limits.ports) || 2}</span></div>
         <div class="card-body stack">
           ${assigned.map((a) => `
@@ -567,6 +592,10 @@ export async function settingsTab(ctx, data) {
       if (serverAvatarFile) serverAvatarFile.addEventListener('change', async () => {
         try {
           const dataUrl = await fileToDataUrl(serverAvatarFile.files[0]);
+          server.avatarImage = dataUrl;
+          const preview = root.querySelector('#server-icon-preview');
+          if (preview) preview.innerHTML = serverIcon(server);
+          window.dispatchEvent(new CustomEvent('od:servers'));
           await api.patch(`/api/servers/${server.id}`, { avatarImage: dataUrl });
           toast('Иконка сервера обновлена', '', 'ok');
           ctx.refresh();

@@ -3,7 +3,7 @@ import { api } from './api.js';
 import { icon } from './icons.js';
 import {
   esc, fmtBytes, fmtMb, fmtDuration, fmtDateTime, statusPill, powerButtons, expiryChip,
-  meter, emptyState, modal, toast, confirmDialog, ansiToHtml, copy, avatar, serializeForm,
+  meter, emptyState, modal, toast, confirmDialog, ansiToHtml, copy, avatar, serializeForm, serverIcon,
 } from './ui.js';
 import { areaChart, ring, historyValues } from './charts.js';
 import { backupsTab, startupTab, accessTab, scheduleTab, settingsTab } from './views-server-tabs.js';
@@ -59,7 +59,7 @@ export async function serverView(ctx) {
 
     <div class="card pad" style="margin-bottom:16px">
       <div class="server-hero">
-        <a class="server-icon hero-icon" href="#/servers">${icon('server', 24)}</a>
+        <a class="server-icon-link" href="#/servers">${serverIcon(server, 'hero')}</a>
         <div class="grow" style="min-width:0">
           <div class="row" style="gap:10px;flex-wrap:wrap">
             <h1 style="font-size:23px">${esc(server.name)}</h1>

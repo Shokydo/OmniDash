@@ -120,6 +120,7 @@ function toastHost() {
 const TOAST_ICONS = { ok: 'check', err: 'alert', info: 'info', warn: 'alert' };
 
 export function toast(title, text = '', kind = 'ok', timeout = 4200) {
+  try { window.dispatchEvent(new CustomEvent('od:sound', { detail: kind === 'err' ? 'err' : kind === 'ok' ? 'ok' : 'nav' })); } catch { /* ignore */ }
   const host = toastHost();
   const el = document.createElement('div');
   el.className = `toast ${kind}`;

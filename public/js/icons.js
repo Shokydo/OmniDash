@@ -96,6 +96,6 @@ export function icon(name, size = 16, cls = '') {
   return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
 }
 
-export function logoMark(size = 19) {
+export function logoMark(size = 32) {
   return `<img src="/anime.jpg" width="${size}" height="${size}" alt="OmniDash" style="width:${size}px;height:${size}px;border-radius:3px;object-fit:cover;display:block" />`;
 }

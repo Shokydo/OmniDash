@@ -5,6 +5,7 @@ import {
   esc, toast, modal, confirmDialog, copy, fmtDuration, avatar, statusPill, setPageTitle, serverIcon,
 } from './ui.js';
 import { loginView } from './views-auth.js';
+import { initThemeFx, Sound } from './theme.js';
 import { dashboardView } from './views-dashboard.js';
 import { serversView, openCreateServer } from './views-servers.js';
 import { serverView } from './views-server.js';
@@ -143,20 +144,11 @@ let appStarted = false;
 function startApp() {
   if (appStarted) { document.body.classList.remove('nav-open'); return; }
   appStarted = true;
+  initThemeFx();
+  window.addEventListener('od:sound', (e) => Sound.play(e.detail || 'nav'));
   document.body.innerHTML = `
   <div class="app">
     <aside class="sidebar" id="sidebar">
-      <div class="brand">
-        <span class="brand-mark">${logoMark(32)}</span>
-        <div>
-          <div class="brand-name" id="brand-name">${esc(S.meta.name || 'OmniDash')}</div>
-          <div class="brand-sub">control plane</div>
-        </div>
-      </div>
-      <div class="sidebar-actions">
-        <button class="side-action" id="logout-btn" title="Выйти из панели">${icon('logout', 15)}<span>Выйти</span></button>
-      </div>
-      <nav class="nav" id="nav"></nav>
       <div class="side-servers" id="side-servers">
         <div class="side-servers-head">
           <span>Серверы</span>
@@ -164,34 +156,29 @@ function startApp() {
         </div>
         <div class="side-servers-list" id="side-servers-list"></div>
         <button class="side-create" id="side-create">${icon('plus', 13)}<span>Создать сервер</span></button>
-      </div>
-      <div class="sidebar-foot">
-        <div class="version-chip" id="version-chip">
-          <span class="live-dot" id="live-dot"></span>
-          <span>v${esc(S.meta.version)}</span>
-          <span class="dim">·</span>
-          ${isAdmin() ? '<a href="#/updates" style="color:inherit" title="Обновления">upd</a>' : '<span>core</span>'}
+        <div class="side-servers-foot">
+          <span class="tiny dim" id="side-servers-active">Активно 0/0</span>
+          <span class="tiny dim mono">v${esc(S.meta.version)}</span>
         </div>
-        <button class="user-card" id="user-card">
-          <span id="user-avatar"></span>
-          <span class="meta">
-            <span class="name" id="user-name"></span>
-            <span class="role" id="user-role"></span>
-          </span>
-          ${icon('chevronRight', 14)}
-        </button>
       </div>
     </aside>
     <div class="main">
       <header class="topbar">
-        <button class="icon-btn mobile-only" id="nav-toggle" aria-label="Меню">${icon('menu', 18)}</button>
-        <div class="crumbs" id="crumbs"></div>
+        <div class="brand top-brand">
+          <span class="brand-mark">${logoMark(32)}</span>
+          <div>
+            <div class="brand-name" id="brand-name">${esc(S.meta.name || 'OmniDash')}</div>
+            <div class="brand-sub">control plane</div>
+          </div>
+        </div>
+        <nav class="topnav" id="nav"></nav>
         <div class="top-actions">
           <button class="search-btn" id="search-open">
             ${icon('search', 14)}<span>Поиск и команды</span><span class="kbd">⌘K</span>
           </button>
           <span class="chip" id="sse-status" style="height:30px"><span class="live-dot" id="live-dot-2"></span><span class="tiny">live</span></span>
           <a class="icon-btn" href="#/profile" id="profile-link" title="Профиль"></a>
+          <button class="icon-btn" id="logout-btn" title="Выйти из панели">${icon('logout', 16)}</button>
         </div>
       </header>
       <main class="content" id="content"></main>
@@ -229,21 +216,18 @@ function renderUserChrome() {
 }
 
 function navFor(routeName, hash) {
-  return NAV.map((group) => {
-    if (group.admin && !isAdmin()) return '';
-    const items = group.items.filter((it) => !it.admin || isAdmin());
-    if (!items.length) return '';
-    return `
-      <div class="nav-section">${esc(group.section)}</div>
-      ${items.map((it) => {
-        const active = routeName === it.id || (it.id === 'servers' && routeName === 'server');
-        const badge = it.badge === 'servers' && S.serversCount ? `<span class="count">${S.serversCount}</span>` : '';
-        const label = it.id === 'servers' && !isAdmin() ? 'Мои серверы' : it.label;
-        return `<a class="nav-item ${active ? 'active' : ''}" href="${it.href}">
-          ${icon(it.icon, 17)}<span>${esc(label)}</span>${badge}
-        </a>`;
-      }).join('')}`;
-  }).join('');
+  const all = [];
+  for (const group of NAV) {
+    if (group.admin && !isAdmin()) continue;
+    for (const it of group.items) {
+      if (it.admin && !isAdmin()) continue;
+      const active = routeName === it.id || (it.id === 'servers' && routeName === 'server');
+      const badge = it.badge === 'servers' && S.serversCount ? `<span class="count">${S.serversCount}</span>` : '';
+      const label = it.id === 'servers' && !isAdmin() ? 'Мои серверы' : it.label;
+      all.push(`<a class="topnav-item ${active ? 'active' : ''}" href="${it.href}">${icon(it.icon, 15)}<span>${esc(label)}</span>${badge}</a>`);
+    }
+  }
+  return all.join('');
 }
 
 function renderNav(hash = location.hash || '#/') {
@@ -273,15 +257,26 @@ function renderSideServers() {
     list.innerHTML = '<div class="side-empty">Серверов нет</div>';
     return;
   }
-  list.innerHTML = S.servers.map((s) => `
+  list.innerHTML = S.servers.map((s) => {
+    const u = s.usage || {};
+    const proc = s.status === 'running' || s.status === 'starting'
+      ? `CPU ${(u.cpu || 0).toFixed(0)}% · RAM ${Math.round((u.memory || 0) / 1024 / 1024)} МБ`
+      : esc((s.egg && s.egg.name) || 'сервер');
+    return `
     <a class="side-server ${s.id === activeId ? 'active' : ''}" href="#/servers/${s.id}/console" title="${esc(s.name)}">
       ${serverIcon(s, 'sm')}
       <span class="ss-meta">
         <span class="ss-name">${esc(s.name)}</span>
-        <span class="ss-sub">${esc((s.egg && s.egg.name) || 'сервер')}${s.allocation ? ` · :${esc(s.allocation.port)}` : ''}</span>
+        <span class="ss-sub">${proc}${s.allocation ? ` · :${esc(s.allocation.port)}` : ''}</span>
       </span>
       <span class="ss-dot ${esc(s.status)}" title="${esc(s.status)}"></span>
-    </a>`).join('');
+    </a>`;
+  }).join('');
+  const activeEl = document.getElementById('side-servers-active');
+  if (activeEl) {
+    const running = S.servers.filter((s) => s.status === 'running' || s.status === 'starting').length;
+    activeEl.textContent = `Активно ${running}/${S.servers.length}`;
+  }
 }
 
 /* ═════════════════════════════ роутер ═════════════════════════════ */

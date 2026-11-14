@@ -3,7 +3,7 @@ import { api } from './api.js';
 import { icon } from './icons.js';
 import {
   esc, fmtBytes, fmtMb, fmtDuration, fmtDateTime, statusPill, powerButtons, expiryChip,
-  meter, emptyState, modal, toast, formDialog, serializeForm, avatar,
+  meter, emptyState, modal, toast, formDialog, serializeForm, avatar, serverIcon,
 } from './ui.js';
 
 export function serverCard(server) {
@@ -13,7 +13,7 @@ export function serverCard(server) {
   return `
   <article class="card hoverable server-card" data-server-id="${server.id}">
     <div class="head">
-      <a class="server-icon" href="#/servers/${server.id}/console">${icon('server', 19)}</a>
+      <a class="server-icon-link" href="#/servers/${server.id}/console">${serverIcon(server)}</a>
       <div class="grow" style="min-width:0">
         <a class="title ellipsis" style="display:block;color:var(--text)" href="#/servers/${server.id}/console">${esc(server.name)}</a>
         <div class="sub">
@@ -51,7 +51,7 @@ export function serverRow(server) {
   <tr class="clickable" data-href="#/servers/${server.id}/console" data-server-id="${server.id}">
     <td>
       <div class="row" style="gap:9px;min-width:0">
-        <span class="avatar sm">${esc((server.name || '?').slice(0, 2))}</span>
+        ${serverIcon(server, 'sm')}
         <div style="min-width:0">
           <div class="ellipsis" style="font-weight:560">${esc(server.name)}</div>
           <div class="tiny dim mono ellipsis">${esc(server.uuid.slice(0, 13))}</div>
