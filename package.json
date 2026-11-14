@@ -20,5 +20,9 @@
   "devDependencies": {
     "esbuild": "^0.28.2",
     "jsdom": "^31.0.1"
+  },
+  "dependencies": {
+    "ssh2": "^1.17.0",
+    "ssh2-sftp-server": "^1.1.2"
   }
 }

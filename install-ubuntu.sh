@@ -79,6 +79,8 @@ else
 fi
 cd "$REPO_DIR"
 chmod +x start.sh install-ubuntu.sh 2>/dev/null || true
+echo "    Ставлю зависимости (ssh2 для SFTP)..."
+npm install --ignore-scripts --no-audit --no-fund || echo "    [!] npm install не удался — выполните вручную: npm install"
 echo
 
 # --- 4. Проверка ---

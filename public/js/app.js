@@ -7,7 +7,7 @@ import {
 import { loginView } from './views-auth.js';
 import { initThemeFx, Sound } from './theme.js';
 import { dashboardView } from './views-dashboard.js';
-import { serversView, openCreateServer } from './views-servers.js';
+import { serversView, openCreateServer, openImportServer } from './views-servers.js';
 import { serverView } from './views-server.js';
 import {
   usersView, rolesView, nodesView, allocationsView, eggsView, auditView, updatesView, settingsView, profileView,
@@ -524,7 +524,10 @@ function openPalette() {
       { label: 'Журнал действий', group: 'Перейти', icon: 'activity', run: () => { location.hash = '#/audit'; } },
       { label: 'Обновления', group: 'Перейти', icon: 'cloudDownload', run: () => { location.hash = '#/updates'; } },
       { label: 'Настройки панели', group: 'Перейти', icon: 'settings', run: () => { location.hash = '#/settings'; } },
-      ...((isAdmin() || ((S.me.permissions || []).includes('servers.create'))) ? [{ label: 'Создать сервер', group: 'Действие', icon: 'plus', run: () => openCreateServer(currentCtx()) }] : []),
+      ...((isAdmin() || ((S.me.permissions || []).includes('servers.create'))) ? [
+        { label: 'Создать сервер', group: 'Действие', icon: 'plus', run: () => openCreateServer(currentCtx()) },
+        { label: 'Импорт сервера из ZIP', group: 'Действие', icon: 'upload', run: () => openImportServer(currentCtx()) },
+      ] : []),
       { label: 'Создать пользователя', group: 'Действие', icon: 'user', run: () => { location.hash = '#/users'; S.pending = '#create-user'; } },
     ] : [
       { label: 'Профиль', group: 'Перейти', icon: 'user', run: () => { location.hash = '#/profile'; } },
@@ -695,6 +698,8 @@ document.addEventListener('click', (e) => {
       route();
     } else if (action === 'create-server') {
       openCreateServer(currentCtx());
+    } else if (action === 'import-server') {
+      openImportServer(currentCtx());
     } else if (action === 'create-user') {
       if (S.route && S.route.name === 'users') {
         const btn = document.getElementById('create-user');

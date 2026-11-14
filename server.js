@@ -17,6 +17,7 @@ const { Daemon } = require('./core/daemon');
 const { Scheduler } = require('./core/scheduler');
 const { Updater } = require('./core/updater');
 const { createApi } = require('./core/api');
+const sftp = require('./core/sftp');
 const { seed } = require('./core/seed');
 
 const PORT = Number(process.env.PORT || 7777);
@@ -38,6 +39,7 @@ updater.broadcast = api.broadcast;
 
 daemon.boot();
 scheduler.start();
+sftp.start();
 updater.startWatcher();
 
 /* ────────────────────────────── статика ────────────────────────────── */

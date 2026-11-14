@@ -38,6 +38,12 @@ if [ "$MAJOR" -lt 18 ]; then
   exit 1
 fi
 
+if [ ! -d node_modules/ssh2 ]; then
+  echo "Ставлю зависимости (ssh2 для SFTP) — один раз..."
+  npm install --ignore-scripts --no-audit --no-fund || echo "[!] npm install не удался — панель запустится без SFTP"
+  echo
+fi
+
 if [ "$MODE" = "reset" ] && [ -d data ]; then
   BAK="data-backup-$(date +%Y%m%d-%H%M%S)"
   echo "Переименовываю data -> $BAK (демо пересоздадутся при старте)"

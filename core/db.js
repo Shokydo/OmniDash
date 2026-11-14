@@ -32,6 +32,7 @@ const DEFAULT_SETTINGS = {
   updateChannel: 'stable',
   motd: '',
   locale: 'ru',
+  sftp: { enabled: true, port: 2222 },
 };
 
 const DEFAULT_DATA = () => ({

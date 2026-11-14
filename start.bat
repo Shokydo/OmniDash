@@ -252,6 +252,13 @@ if /i "%MODE%"=="reset" (
     set "MODE=normal"
 )
 
+if not exist "%~dp0node_modules\ssh2" (
+    echo   SFTP-зависимость ssh2 не установлена. Устанавливаем... ^(один раз^)
+    echo.
+    call npm install --ignore-scripts --no-audit --no-fund
+    echo.
+)
+
 if /i "%MODE%"=="dev" (
     if not exist "%~dp0node_modules" (
         echo   DEV-режим: dev-зависимости ^(esbuild, jsdom^) не установлены.

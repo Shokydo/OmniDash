@@ -1167,6 +1167,19 @@ export async function settingsView(ctx) {
         </div>
       </div>
 
+        <div class="form-section">
+          <h3>SFTP</h3>
+          <p class="hint">Доступ к файлам серверов через SFTP-клиенты (FileZilla, WinSCP, scp). Логин и пароль — от аккаунта панели; после входа виден список доступных серверов.</p>
+          <div class="stack">
+            <label class="switch"><input type="checkbox" name="sftpEnabled" ${s.sftp && s.sftp.enabled !== false ? 'checked' : ''}/><span class="track"></span><span class="switch-text">SFTP включён</span></label>
+            <div class="field"><label>Порт SFTP</label>
+              <div class="input-group"><input class="input" type="number" name="sftpPort" value="${(s.sftp && s.sftp.port) || 2222}" min="1" max="65535" /><span class="input-suffix">порт</span></div>
+            </div>
+            <div class="notice">${icon('info', 16)}<div>Изменение порта или выключение перезапускает SFTP-сервер сразу, без перезагрузки панели. Ключ хоста генерируется автоматически и хранится в data/sftp.</div></div>
+          </div>
+        </div>
+      </div>
+
       <div class="row">
         <button class="btn primary" type="submit">${icon('save', 15)} Сохранить настройки</button>
         <span class="hint">Некоторые изменения применяются сразу, другие — после перезагрузки интерфейса.</span>
@@ -1243,6 +1256,7 @@ export async function settingsView(ctx) {
             updateChannel: v.updateChannel,
             accent: v.accent,
             defaultLimits,
+            sftp: { enabled: v.sftpEnabled, port: v.sftpPort },
           });
           toast('Настройки сохранены', '', 'ok');
           ctx.applySettings && ctx.applySettings(res.settings);

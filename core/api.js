@@ -19,6 +19,8 @@ const backupsCore = require('./backups');
 const eggsCore = require('./eggs');
 const kernelsCore = require('./kernels');
 const rolesCore = require('./roles');
+const zipCore = require('./zip');
+const sftpCore = require('./sftp');
 const { makeTask, ACTIONS } = require('./scheduler');
 
 const STATUSES = daemonCore.STATUS;
@@ -419,7 +421,7 @@ function createApi(deps) {
       },
       features: {
         subusers: true, backups: true, scheduler: true, api: true,
-        autoUpdate: !!updater, ssh: false, databases: false,
+        autoUpdate: !!updater, ssh: false, databases: false, sftp: true,
       },
     };
   }, { public: true });
@@ -687,6 +689,69 @@ function createApi(deps) {
     }
     return serverJson(server, ctx.user, daemon);
   });
+
+  route('GET', '/api/sftp', (ctx) => {
+    return { ...sftpCore.status(), username: ctx.user.username };
+  });
+
+  route('POST', '/api/servers/import', async (ctx) => {
+    if (!auth.hasPerm(ctx.user, 'servers.create')) throw forbidden('Импорт серверов доступен только администраторам');
+    const q = ctx.query || {};
+    const isAdmin = auth.isAdmin(ctx.user);
+    const buf = await readBody(ctx.req, 512 * 1024 * 1024);
+    if (!buf.length) throw bad('ZIP-файл не передан');
+    let items;
+    try {
+      items = zipCore.read(buf);
+    } catch (err) {
+      throw bad(`Не удалось прочитать ZIP: ${err.message}`);
+    }
+    if (!items.length) throw bad('ZIP-архив пуст');
+    const owner = isAdmin && q.ownerId ? db.userById(q.ownerId) : ctx.user;
+    if (!owner) throw bad('Владелец не найден');
+    if (!isAdmin && q.ownerId && q.ownerId !== ctx.user.id) throw forbidden();
+    const egg = db.eggById(q.eggId) || db.eggById(db.data.settings.defaultEggId) || db.data.eggs[0];
+    if (!egg) throw bad('Сначала создайте шаблон сервера');
+    const node = (isAdmin && q.nodeId ? db.nodeById(q.nodeId) : db.data.nodes.find((n) => nodeIsLocal(n)))
+      || db.data.nodes.find((n) => nodeIsLocal(n));
+    if (!node) throw bad('Нет доступного узла');
+    if (!nodeIsLocal(node)) throw bad('Запуск возможен только на локальном узле (fqdn localhost)');
+    const limits = serversCore.normalizeLimits({
+      memory: q.memory,
+      disk: q.disk,
+      cpu: q.cpu,
+      io: q.io,
+    });
+    const check = serversCore.checkUserLimits(owner, limits);
+    if (!check.ok) throw conflict(check.error);
+    const server = serversCore.createServer({
+      owner,
+      egg,
+      node,
+      name: q.name,
+      description: q.description || '',
+      limits,
+      environment: {},
+      expiresDays: isAdmin ? (q.expiresDays === undefined ? db.data.settings.expiryDays : q.expiresDays) : db.data.settings.expiryDays,
+      actor: ctx.user,
+      autoStart: false,
+    });
+    let extracted;
+    try {
+      extracted = zipCore.extractTo(buf, db.serverDir(server.id));
+    } catch (err) {
+      serversCore.deleteServer(server.id, ctx.user);
+      throw bad(`Не удалось распаковать ZIP: ${err.message}`);
+    }
+    db.audit({
+      action: 'server.import',
+      actorId: ctx.user.id,
+      actorName: ctx.user.username,
+      target: server.name,
+      meta: { owner: owner.username, egg: egg.name, files: extracted.files, entries: extracted.entries },
+    });
+    return { ...serverJson(server, ctx.user, daemon), imported: { files: extracted.files, entries: extracted.entries } };
+  }, { rawBody: true });
 
   route('GET', '/api/servers/:id', (ctx) => {
     const server = db.serverById(ctx.params.id);
@@ -1726,6 +1791,13 @@ function createApi(deps) {
     }
     if (body.defaultEggId !== undefined) {
       s.defaultEggId = body.defaultEggId ? String(body.defaultEggId) : null;
+    }
+    if (body.sftp && typeof body.sftp === 'object') {
+      s.sftp = {
+        enabled: body.sftp.enabled === undefined ? (s.sftp && s.sftp.enabled !== false) : !!body.sftp.enabled,
+        port: clamp(int(body.sftp.port, (s.sftp && s.sftp.port) || 2222), 1, 65535),
+      };
+      sftpCore.apply();
     }
     if (body.showDemoCredentials !== undefined) db.data.meta.demo = !!body.showDemoCredentials;
     db.save();

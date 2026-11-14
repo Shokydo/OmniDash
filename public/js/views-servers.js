@@ -97,7 +97,7 @@ export async function serversView(ctx) {
     if (!filtered.length) {
       host.innerHTML = `<div class="card">${emptyState('server', 'Ничего не найдено',
         servers.length ? 'Измените фильтр или поисковый запрос.' : 'Создайте первый сервер — панель выдаст порт, каталог и консоль.',
-        ctx.canCreateServer ? `<button class="btn primary" data-action="create-server">${icon('plus', 15)} Создать сервер</button>` : '')}</div>`;
+        ctx.canCreateServer ? `<button class="btn primary" data-action="create-server">${icon('plus', 15)} Создать сервер</button> <button class="btn" data-action="import-server">${icon('upload', 15)} Импорт ZIP</button>` : '')}</div>`;
     } else if (view === 'table') {
       host.innerHTML = `<div class="card table-wrap"><table class="table"><thead><tr>
         <th>Сервер</th><th>Статус</th><th>Владелец</th><th>Шаблон</th><th>Порт</th><th>Лимиты</th><th>Срок</th><th></th>
@@ -133,6 +133,7 @@ export async function serversView(ctx) {
           <button data-view="cards" class="${view === 'cards' ? 'active' : ''}">${icon('grid', 13)}</button>
           <button data-view="table" class="${view === 'table' ? 'active' : ''}">${icon('list', 13)}</button>
         </div>
+        ${ctx.canCreateServer ? `<button class="btn" data-action="import-server">${icon('upload', 15)} Импорт ZIP</button>` : ''}
         ${ctx.canCreateServer ? `<button class="btn primary" data-action="create-server">${icon('plus', 15)} Создать сервер</button>` : ''}
       </div>
     </div>
@@ -360,6 +361,158 @@ export async function openCreateServer(ctx, opts = {}) {
         } catch (err) {
           toast('Не удалось создать сервер', err.message, 'err');
           btn.disabled = false;
+        }
+      });
+    },
+  });
+  return close;
+}
+
+/* ─────────────────────── импорт сервера из ZIP ─────────────────────── */
+
+export async function openImportServer(ctx) {
+  const [eggsData, usersData] = await Promise.all([
+    api.get('/api/eggs').catch(() => ({ eggs: [] })),
+    ctx.me.role === 'admin' ? api.get('/api/users').catch(() => ({ users: [] })) : Promise.resolve({ users: [] }),
+  ]);
+  const eggs = eggsData.eggs || [];
+  const users = usersData.users || [];
+  const limits = ctx.me.limits || {};
+
+  const body = `
+  <form class="stack" data-import-server>
+    <div class="drop-zone" id="imp-drop">
+      ${icon('upload', 22)}
+      <div class="drop-title">Перетащите ZIP-архив сюда или нажмите для выбора</div>
+      <div class="tiny dim">Архив распакуется в каталог нового сервера. Поддерживаются .zip до 512 МБ.</div>
+      <input type="file" id="imp-file" accept=".zip,application/zip" class="hidden" />
+      <div class="chip hidden" id="imp-file-chip"></div>
+    </div>
+    <div class="form-grid">
+      <div class="field span-2">
+        <label>Название сервера</label>
+        <input class="input" name="name" placeholder="Мир Друзей" required maxlength="60" autofocus />
+      </div>
+      ${ctx.me.role === 'admin' ? `
+      <div class="field">
+        <label>Владелец</label>
+        <select class="select" name="ownerId">
+          ${users.map((u) => `<option value="${u.id}">${esc(u.username)}${u.role === 'admin' ? ' (админ)' : ''}</option>`).join('')}
+        </select>
+      </div>` : ''}
+      <div class="field">
+        <label>Шаблон (egg)</label>
+        <select class="select" name="eggId">
+          ${eggs.map((e) => `<option value="${e.id}" ${e.key === 'paper' ? 'selected' : ''}>${esc(e.name)} · ${esc(e.category)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label>Память (МБ)</label>
+        <input class="input" type="number" name="memory" value="${Math.min(2048, limits.memory || 2048)}" min="128" step="128" />
+      </div>
+      <div class="field">
+        <label>Диск (МБ)</label>
+        <input class="input" type="number" name="disk" value="${Math.min(10240, limits.disk || 10240)}" min="64" step="256" />
+      </div>
+      <div class="field">
+        <label>CPU (%)</label>
+        <input class="input" type="number" name="cpu" value="${Math.min(100, limits.cpu || 100)}" min="5" max="1600" step="5" />
+      </div>
+      <div class="field">
+        <label>Срок аренды</label>
+        <div class="input-group">
+          <input class="input" type="number" name="expiresDays" value="${ctx.me.role === 'admin' ? 30 : (ctx.meta && ctx.meta.expiryDays) || 30}" min="1" max="3650" />
+          <span class="input-suffix">дней</span>
+        </div>
+      </div>
+      <div class="field span-2">
+        <label>Описание <span class="dim">— необязательно</span></label>
+        <input class="input" name="description" placeholder="Импортирован из ZIP" maxlength="200" />
+      </div>
+    </div>
+    <div class="notice">${icon('info', 16)}<div>Сервер создаётся как обычно (порт, лимиты, консоль), а содержимое ZIP распаковывается в его каталог. Если в архиве есть server.properties — его можно сразу править во вкладке «Переменные».</div></div>
+  </form>`;
+
+  const close = modal({
+    title: 'Импорт сервера из ZIP',
+    subtitle: 'Создание сервера + распаковка архива в его каталог.',
+    wide: true,
+    body,
+    footer: `<button class="btn" data-close>Отмена</button><button class="btn primary" data-import>${icon('upload', 15)} Импортировать</button>`,
+    onMount: (overlay) => {
+      const form = overlay.querySelector('[data-import-server]');
+      const drop = overlay.querySelector('#imp-drop');
+      const fileInput = overlay.querySelector('#imp-file');
+      const chip = overlay.querySelector('#imp-file-chip');
+      let selectedFile = null;
+
+      const setFile = (file) => {
+        if (!file) return;
+        if (!/\.zip$/i.test(file.name) && file.type !== 'application/zip') {
+          toast('Нужен ZIP-файл', file.name, 'warn');
+          return;
+        }
+        selectedFile = file;
+        chip.textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(1)} МБ`;
+        chip.classList.remove('hidden');
+        const nameInput = form.querySelector('[name="name"]');
+        if (nameInput && !nameInput.value) {
+          nameInput.value = file.name.replace(/\.zip$/i, '').replace(/[-_]+/g, ' ').trim().slice(0, 60);
+        }
+      };
+
+      drop.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', () => setFile(fileInput.files[0]));
+      drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+      drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+      drop.addEventListener('drop', (e) => {
+        e.preventDefault();
+        drop.classList.remove('over');
+        setFile(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]);
+      });
+
+      overlay.querySelector('[data-import]').addEventListener('click', async () => {
+        const btn = overlay.querySelector('[data-import]');
+        const values = serializeForm(form);
+        if (!selectedFile) {
+          toast('Выберите ZIP-файл', 'Без архива импортировать нечего', 'warn');
+          return;
+        }
+        if (!values.name || values.name.trim().length < 2) {
+          toast('Укажите название', 'Минимум 2 символа', 'warn');
+          return;
+        }
+        btn.disabled = true;
+        btn.textContent = 'Импорт…';
+        try {
+          const params = new URLSearchParams({
+            name: values.name.trim(),
+            eggId: values.eggId || '',
+            ownerId: values.ownerId || '',
+            memory: String(values.memory || 2048),
+            disk: String(values.disk || 10240),
+            cpu: String(values.cpu || 100),
+            expiresDays: String(values.expiresDays || 30),
+            description: values.description || '',
+          });
+          const res = await fetch(`/api/servers/import?${params.toString()}`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: selectedFile,
+          });
+          const data = await res.json().catch(() => null);
+          if (!res.ok || !data || data.ok === false) {
+            throw new Error((data && data.error) || `HTTP ${res.status}`);
+          }
+          const server = data.data;
+          toast('Сервер импортирован', `${server.name} · файлов: ${server.imported ? server.imported.files : '—'}`, 'ok');
+          close();
+          window.location.hash = `#/servers/${server.id}/console`;
+        } catch (err) {
+          toast('Не удалось импортировать', err.message, 'err');
+          btn.disabled = false;
+          btn.innerHTML = `${icon('upload', 15)} Импортировать`;
         }
       });
     },

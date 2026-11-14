@@ -793,3 +793,19 @@ body[data-density="comfortable"] .card-body { padding: 22px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
 }
+
+/* ── SFTP-карточка (вкладка «Файлы») ── */
+.sftp-card { padding: 14px 16px; margin-bottom: 16px; }
+.sftp-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.sftp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
+.sftp-cell { display: flex; flex-direction: column; gap: 3px; border: 1px solid var(--line); border-radius: 3px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.sftp-cell code { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sftp-foot { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.sftp-conn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--line); border-radius: 3px; padding: 7px 10px; background: #000; font-size: 12px; }
+@media (max-width: 900px) { .sftp-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* ── Drop-зона импорта ZIP ── */
+.drop-zone { border: 1px dashed var(--line-strong); border-radius: 4px; padding: 26px 16px; text-align: center; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text-dim); }
+.drop-zone:hover, .drop-zone.over { border-color: #fff; color: var(--text); background: var(--surface); }
+.drop-zone svg { width: 26px; height: 26px; }
+.drop-title { font-size: 14px; font-weight: 550; color: var(--text); }
