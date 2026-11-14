@@ -149,9 +149,20 @@ function startApp() {
   document.body.innerHTML = `
   <div class="app">
     <aside class="sidebar" id="sidebar">
+      <div class="brand side-brand">
+        <span class="brand-mark">${logoMark(32)}</span>
+        <div>
+          <div class="brand-name" id="brand-name">${esc(S.meta.name || 'OmniDash')}</div>
+          <div class="brand-sub">control plane</div>
+        </div>
+      </div>
       <div class="side-servers" id="side-servers">
+        <a class="side-all" id="side-all" href="#/servers">
+          ${icon('servers', 14)}<span>Все серверы</span>
+          <span class="count" id="side-all-count">0</span>
+        </a>
         <div class="side-servers-head">
-          <span>Серверы</span>
+          <span>Доступные мне</span>
           <span class="count" id="side-servers-count">0</span>
         </div>
         <div class="side-servers-list" id="side-servers-list"></div>
@@ -164,13 +175,6 @@ function startApp() {
     </aside>
     <div class="main">
       <header class="topbar">
-        <div class="brand top-brand">
-          <span class="brand-mark">${logoMark(32)}</span>
-          <div>
-            <div class="brand-name" id="brand-name">${esc(S.meta.name || 'OmniDash')}</div>
-            <div class="brand-sub">control plane</div>
-          </div>
-        </div>
         <nav class="topnav" id="nav"></nav>
         <div class="top-actions">
           <button class="search-btn" id="search-open">
@@ -257,6 +261,10 @@ function renderSideServers() {
   const count = document.getElementById('side-servers-count');
   if (!list) return;
   if (count) count.textContent = String(S.servers.length);
+  const allCount = document.getElementById('side-all-count');
+  if (allCount) allCount.textContent = String(S.servers.length);
+  const allBtn = document.getElementById('side-all');
+  if (allBtn) allBtn.classList.toggle('active', S.route && (S.route.name === 'servers' || S.route.name === 'dashboard'));
   const activeId = S.route && S.route.name === 'server' ? S.route.params.id : null;
   if (!S.servers.length) {
     list.innerHTML = '<div class="side-empty">Серверов нет</div>';
