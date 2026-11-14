@@ -39,7 +39,6 @@ export function loginView(ctx) {
             <div class="pm-name">${esc(meta.name || 'OmniDash')}</div>
             <div class="pm-sub">control plane · v${esc(meta.version || '1.0.0')}</div>
           </div>
-          <span class="pm-gear" title="Панель">${icon('settings', 16)}</span>
         </div>
         <div class="auth-mobile-brand">
           <span class="brand-mark">${logoMark(32)}</span>

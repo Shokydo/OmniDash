@@ -189,13 +189,11 @@ function startApp() {
   renderUserChrome();
   renderNav();
   connectSSE();
-  document.getElementById('nav-toggle').addEventListener('click', () => document.body.classList.toggle('nav-open'));
-  document.getElementById('nav').addEventListener('click', () => document.body.classList.remove('nav-open'));
-  document.getElementById('search-open').addEventListener('click', openPalette);
-  document.getElementById('user-card').addEventListener('click', () => { location.hash = '#/profile'; });
-  document.getElementById('logout-btn').addEventListener('click', () => logout());
-  document.getElementById('side-create').addEventListener('click', () => openCreateServer({ me: S.me, meta: S.meta, refresh: () => route() }));
-  document.getElementById('profile-link').addEventListener('click', (e) => { e.preventDefault(); location.hash = '#/profile'; });
+  document.getElementById('nav')?.addEventListener('click', () => document.body.classList.remove('nav-open'));
+  document.getElementById('search-open')?.addEventListener('click', openPalette);
+  document.getElementById('logout-btn')?.addEventListener('click', () => logout());
+  document.getElementById('side-create')?.addEventListener('click', () => openCreateServer({ me: S.me, meta: S.meta, refresh: () => route() }));
+  document.getElementById('profile-link')?.addEventListener('click', (e) => { e.preventDefault(); location.hash = '#/profile'; });
 
   if (!location.hash) location.hash = '#/';
   route();
@@ -204,15 +202,17 @@ function startApp() {
 }
 
 function renderUserChrome() {
+  if (!S.me) return;
   const avatarEl = document.getElementById('user-avatar');
+  if (avatarEl) avatarEl.innerHTML = avatar(S.me);
   const nameEl = document.getElementById('user-name');
+  if (nameEl) nameEl.textContent = S.me.username;
   const roleEl = document.getElementById('user-role');
-  if (!avatarEl) return;
-  avatarEl.innerHTML = avatar(S.me);
-  nameEl.textContent = S.me.username;
-  roleEl.textContent = S.me.role === 'admin' ? 'администратор' : 'пользователь';
-  document.getElementById('profile-link').innerHTML = avatar(S.me, 'sm');
-  document.getElementById('brand-name').textContent = S.meta.name || 'OmniDash';
+  if (roleEl) roleEl.textContent = S.me.role === 'admin' ? 'администратор' : 'пользователь';
+  const profileLink = document.getElementById('profile-link');
+  if (profileLink) profileLink.innerHTML = avatar(S.me, 'sm');
+  const brandName = document.getElementById('brand-name');
+  if (brandName) brandName.textContent = S.meta.name || 'OmniDash';
 }
 
 function navFor(routeName, hash) {

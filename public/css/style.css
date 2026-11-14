@@ -624,9 +624,25 @@ body[data-density="comfortable"] .card-body { padding: 22px; }
 }
 .auth-art { position: relative; padding: 46px; display: flex; flex-direction: column; justify-content: space-between; border-right: 1px solid var(--line); overflow: hidden; background: #000; }
 .auth-art::after {
-  content: ""; position: absolute; inset: 0;
-  background-image: linear-gradient(rgba(255,255,255,.028) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px);
-  background-size: 46px 46px; mask-image: radial-gradient(ellipse at 40% 40%, #000 30%, transparent 78%);
+  content: ""; position: absolute; inset: -46px;
+  background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(ellipse at 40% 40%, #000 30%, transparent 78%);
+  animation: gridDrift 24s linear infinite;
+}
+.auth-art::before {
+  content: ""; position: absolute; inset: 0; z-index: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.05) 48%, rgba(255,255,255,.09) 50%, rgba(255,255,255,.05) 52%, transparent 70%);
+  background-size: 250% 100%;
+  animation: shineSweep 7s ease-in-out infinite;
+}
+@keyframes gridDrift {
+  from { transform: translate(0, 0); }
+  to { transform: translate(46px, 46px); }
+}
+@keyframes shineSweep {
+  0% { background-position: 120% 0; }
+  55%, 100% { background-position: -120% 0; }
 }
 .auth-art > * { position: relative; z-index: 1; }
 .auth-brand { display: flex; align-items: center; gap: 11px; }
