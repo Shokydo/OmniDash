@@ -12,7 +12,7 @@ const TAB_DEFS = [
   { id: 'console', label: 'Консоль', icon: 'terminal', perm: 'console' },
   { id: 'manage', label: 'Управление', icon: 'activity', perm: 'control' },
   { id: 'files', label: 'Файлы', icon: 'folder', perm: 'files' },
-  { id: 'sftp', label: 'SFTP', icon: 'network', perm: 'files' },
+  { id: 'connections', label: 'Подключения', icon: 'network', perm: 'files' },
   { id: 'backups', label: 'Бэкапы', icon: 'backup', perm: 'backups' },
   { id: 'startup', label: 'Переменные', icon: 'sliders', perm: 'startup' },
   { id: 'access', label: 'Доступы', icon: 'users', perm: 'users' },
@@ -33,7 +33,7 @@ export async function serverView(ctx) {
   if (tab === 'console') tabResult = consoleTab(ctx, data);
   else if (tab === 'manage') tabResult = manageTab(ctx, data);
   else if (tab === 'files') tabResult = await filesTab(ctx, data);
-  else if (tab === 'sftp') tabResult = await sftpTab(ctx, data);
+  else if (tab === 'connections') tabResult = await connectionsTab(ctx, data);
   else if (tab === 'backups') tabResult = await backupsTab(ctx, data);
   else if (tab === 'startup') tabResult = await startupTab(ctx, data);
   else if (tab === 'access') tabResult = await accessTab(ctx, data);
@@ -476,23 +476,22 @@ function manageTab(ctx, data) {
 
 /* ═════════════════════════════ файлы ═════════════════════════════ */
 
-async function sftpTab(ctx, data) {
+async function connectionsTab(ctx, data) {
   const server = data.server;
   const can = (p) => server.permissions.includes(p) || server.isAdmin;
   if (!can('files')) return { html: emptyState('lock', 'Нет доступа к файлам', 'Владелец сервера не выдал право «Файлы».') };
   let sftpInfo = null;
   try { sftpInfo = await api.get('/api/sftp'); } catch { sftpInfo = null; }
+  let portsData = { assigned: [], available: [] };
+  try { portsData = await api.get(`/api/servers/${server.id}/allocations`); } catch { portsData = { assigned: [], available: [] }; }
+  const assigned = portsData.assigned || [];
+  const available = portsData.available || [];
+  const isAdmin = !!server.isAdmin;
 
-  if (!sftpInfo || !sftpInfo.enabled) {
-    return {
-      html: `<div class="card">${emptyState('network', 'SFTP выключен', 'Администратор панели отключил SFTP в настройках. Файлы доступны во вкладке «Файлы».')}</div>`,
-      mount() {},
-    };
-  }
-
-  const host = (typeof location !== 'undefined' && location.hostname) || 'localhost';
-  const conn = `sftp://${sftpInfo.username}@${host}:${sftpInfo.port}`;
-  const html = `
+  const sftpBlock = sftpInfo && sftpInfo.enabled ? (() => {
+    const host = (typeof location !== 'undefined' && location.hostname) || 'localhost';
+    const conn = `sftp://${sftpInfo.username}@${host}:${sftpInfo.port}`;
+    return `
   <div class="card sftp-card">
     <div class="sftp-head">
       <span class="panel-title">${icon('network', 14)} Подключение по SFTP</span>
@@ -519,6 +518,48 @@ async function sftpTab(ctx, data) {
       <div><b>4.</b> Если панель работает на виртуальной машине с NAT, порт SFTP (${sftpInfo.port}) нужно пробросить в VirtualBox так же, как порт панели (7777).</div>
     </div>
   </div>`;
+  })() : `<div class="card">${emptyState('network', 'SFTP выключен', 'Администратор панели отключил SFTP в настройках. Файлы доступны во вкладке «Файлы».')}</div>`;
+
+  const portsBlock = `
+  <div class="card">
+    <div class="card-head">
+      <div class="panel-title">${icon('network', 15)} Порты сервера</div>
+      <span class="chip">${assigned.length} шт.</span>
+    </div>
+    <div class="card-body stack">
+      ${assigned.length ? assigned.map((a) => `
+        <div class="row" style="padding:8px 10px;border:1px solid var(--line);border-radius:3px">
+          <span class="mono">${esc(a.ip)}:${esc(a.port)}</span>
+          ${a.primary ? '<span class="pill accent" style="height:20px">основной</span>' : ''}
+          ${isAdmin ? `<span class="right row" style="gap:4px">
+            ${!a.primary ? `<button class="btn sm ghost" data-conn-primary="${a.id}" title="Сделать основным">${icon('flag', 13)}</button>` : ''}
+            ${!a.primary ? `<button class="btn sm ghost danger" data-conn-remove="${a.id}" title="Освободить">${icon('x', 13)}</button>` : ''}
+          </span>` : ''}
+        </div>`).join('') : '<div class="tiny dim">Портов нет.</div>'}
+      ${isAdmin ? `
+      <div class="row">
+        <select class="select" id="conn-port-select" style="flex:1" ${available.length ? '' : 'disabled'}>
+          ${available.map((a) => `<option value="${a.id}">${esc(a.ip)}:${esc(a.port)}</option>`).join('') || '<option>Свободных портов нет</option>'}
+        </select>
+        <button class="btn" id="conn-port-add" ${available.length ? '' : 'disabled'}>${icon('plus', 14)} Добавить</button>
+      </div>
+      <div class="row" style="gap:8px">
+        <input class="input mono" id="conn-port-ip" value="0.0.0.0" style="width:130px" title="IP" />
+        <input class="input mono" id="conn-port-num" type="number" min="1" max="65535" placeholder="свой порт" style="width:130px" />
+        <button class="btn" id="conn-port-custom">${icon('plus', 14)} Создать и добавить</button>
+      </div>
+      <div class="hint">Ручное добавление: выберите свободный порт или укажите свой. Основной порт задаёт <span class="mono">server-port</span> в server.properties и переменную <span class="mono">{{PORT}}</span>. Случайная выдача и блоклист — на странице <a href="#/allocations">Аллокации</a>.</div>
+      ` : `
+      <div class="notice">${icon('lock', 16)}<div>Порт выдаётся случайно при создании сервера (рандомайзер панели) и не меняется. Если нужен другой порт — обратитесь к администратору.</div></div>
+      `}
+    </div>
+  </div>`;
+
+  const html = `
+  <div class="stack">
+    ${portsBlock}
+    ${sftpBlock}
+  </div>`;
 
   return {
     html,
@@ -530,6 +571,50 @@ async function sftpTab(ctx, data) {
           if (el) copy(el.textContent, 'Строка подключения скопирована');
         });
       }
+      if (!isAdmin) return;
+      const addBtn = document.getElementById('conn-port-add');
+      if (addBtn) {
+        addBtn.addEventListener('click', async () => {
+          const select = document.getElementById('conn-port-select');
+          try {
+            await api.post(`/api/servers/${server.id}/allocations`, { allocationId: select.value });
+            toast('Порт добавлен', '', 'ok');
+            ctx.refresh();
+          } catch (err) { toast('Ошибка', err.message, 'err'); }
+        });
+      }
+      const customBtn = document.getElementById('conn-port-custom');
+      if (customBtn) {
+        customBtn.addEventListener('click', async () => {
+          const ip = (document.getElementById('conn-port-ip').value || '0.0.0.0').trim();
+          const port = Number(document.getElementById('conn-port-num').value);
+          if (!port || port < 1 || port > 65535) { toast('Укажите порт', '1–65535', 'warn'); return; }
+          try {
+            const alloc = await api.post('/api/allocations', { nodeId: server.nodeId || (data.node && data.node.id), ip, port });
+            await api.post(`/api/servers/${server.id}/allocations`, { allocationId: alloc.id });
+            toast('Порт создан и добавлен', `${ip}:${port}`, 'ok');
+            ctx.refresh();
+          } catch (err) { toast('Ошибка', err.message, 'err'); }
+        });
+      }
+      document.querySelectorAll('[data-conn-primary]').forEach((b) => {
+        b.addEventListener('click', async () => {
+          try {
+            await api.post(`/api/servers/${server.id}/allocations`, { allocationId: b.dataset.connPrimary, primary: true });
+            toast('Основной порт обновлён', 'server-port в server.properties синхронизирован', 'ok');
+            ctx.refresh();
+          } catch (err) { toast('Ошибка', err.message, 'err'); }
+        });
+      });
+      document.querySelectorAll('[data-conn-remove]').forEach((b) => {
+        b.addEventListener('click', async () => {
+          try {
+            await api.del(`/api/servers/${server.id}/allocations/${b.dataset.connRemove}`);
+            toast('Порт освобождён', '', 'ok');
+            ctx.refresh();
+          } catch (err) { toast('Ошибка', err.message, 'err'); }
+        });
+      });
     },
   };
 }

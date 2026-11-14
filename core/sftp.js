@@ -187,6 +187,12 @@ function attachSftp(sftp, user, root, allowed) {
   sftp.on('OPEN', (reqid, filename, flags, attrs) => {
     const abs = resolveSafe(root, allowed, filename);
     if (!abs) return sftp.status(reqid, STATUS.NO_SUCH_FILE, 'Нет доступа');
+    // server.properties по SFTP для обычных пользователей — только чтение:
+    // server-port задаётся панелью и меняется только администратором.
+    const base = path.posix.basename(String(filename).replace(/\\/g, '/'));
+    if (base === 'server.properties' && (flags & 0x2) && user.role !== 'admin') {
+      return sftp.status(reqid, STATUS.PERMISSION_DENIED, 'server.properties доступен только для чтения');
+    }
     const READ = !!(flags & 0x1);
     const WRITE = !!(flags & 0x2);
     const APPEND = !!(flags & 0x4);

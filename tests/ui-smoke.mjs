@@ -157,7 +157,7 @@ await check('список серверов', async () => {
   console.log('    карточек:', window.document.querySelectorAll('.server-card').length);
 });
 
-const TAB_NAMES = { console: 'Консоль', manage: 'Управление', files: 'Файлы', sftp: 'SFTP', backups: 'Бэкапы', startup: 'Переменные', access: 'Доступы', schedule: 'Расписание', settings: 'Настройки' };
+const TAB_NAMES = { console: 'Консоль', manage: 'Управление', files: 'Файлы', connections: 'Подключения', backups: 'Бэкапы', startup: 'Переменные', access: 'Доступы', schedule: 'Расписание', settings: 'Настройки' };
 for (const tab of Object.keys(TAB_NAMES)) {
   await check(`сервер → ${tab}`, async () => {
     window.location.hash = `#/servers/${server.id}/${tab}`;

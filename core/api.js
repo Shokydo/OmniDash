@@ -209,6 +209,48 @@ function adminOnly(user) {
   if (!auth.isAdmin(user)) throw forbidden('Доступно только администратору');
 }
 
+/** server-port в server.properties для обычных пользователей менять нельзя:
+ *  разрешено только неизменённое значение или равное основному порту. */
+function assertServerPort(server, portValue, user, currentValue) {
+  if (!user || auth.isAdmin(user)) return;
+  if (portValue === undefined || portValue === null || portValue === '') return;
+  if (currentValue !== undefined && currentValue !== null && Number(portValue) === Number(currentValue)) return;
+  const primary = db.allocationById(server.allocationId);
+  if (!primary) return;
+  if (Number(portValue) !== Number(primary.port)) {
+    throw forbidden('server-port задаётся панелью (основной порт сервера) и меняется только администратором');
+  }
+}
+
+/** Текущий server-port в файле сервера (null — файла/ключа нет). */
+function currentServerPort(server) {
+  try {
+    const { props } = filesCore.readProps(server);
+    return props['server-port'] !== undefined ? Number(props['server-port']) : null;
+  } catch {
+    return null;
+  }
+}
+
+function serverPortFromContent(content) {
+  const m = String(content || '').match(/^server-port\s*=\s*(\d+)/m);
+  return m ? Number(m[1]) : null;
+}
+
+/** Синхронизация server-port в server.properties с основным портом сервера. */
+function syncServerPort(server) {
+  try {
+    const primary = db.allocationById(server.allocationId);
+    if (!primary) return;
+    const file = path.join(filesCore.root(server), 'server.properties');
+    if (!fs.existsSync(file)) return;
+    const { props } = filesCore.readProps(server);
+    if (String(props['server-port']) === String(primary.port)) return;
+    props['server-port'] = String(primary.port);
+    filesCore.writeProps(server, props);
+  } catch { /* ignore */ }
+}
+
 function nodeIsLocal(node) {
   return !!node && ['localhost', '127.0.0.1', '::1'].includes(String(node.fqdn).toLowerCase());
 }
@@ -1037,6 +1079,7 @@ function createApi(deps) {
     const server = db.serverById(ctx.params.id);
     if (!server) throw notFound();
     permit(ctx.user, server, 'allocations');
+    adminOnly(ctx.user);
     const { allocationId, primary } = ctx.body || {};
     if (!allocationId) {
       const alloc = serversCore.ensureAllocation(server.nodeId, server.id);
@@ -1051,6 +1094,7 @@ function createApi(deps) {
       throw conflict(`Лимит портов: ${maxPorts}`);
     }
     const alloc = serversCore.assignAllocation(server.id, allocationId, primary !== false);
+    if (primary !== false) syncServerPort(server);
     db.audit({ action: 'server.port.add', actorId: ctx.user.id, actorName: ctx.user.username, target: server.name, meta: { port: alloc.port } });
     serverChanged(server.id);
     return serverJson(server, ctx.user, daemon);
@@ -1060,6 +1104,7 @@ function createApi(deps) {
     const server = db.serverById(ctx.params.id);
     if (!server) throw notFound();
     permit(ctx.user, server, 'allocations');
+    adminOnly(ctx.user);
     if ((server.allocations || []).length <= 1) throw conflict('У сервера должен остаться хотя бы один порт');
     if (server.allocationId === ctx.params.allocationId) throw conflict('Нельзя удалить основной порт');
     serversCore.releaseAllocation(ctx.params.allocationId);
@@ -1132,7 +1177,9 @@ function createApi(deps) {
     const server = db.serverById(ctx.params.id);
     if (!server) throw notFound();
     permit(ctx.user, server, 'files');
-    const result = filesCore.writeProps(server, (ctx.body || {}).props || {});
+    const props = (ctx.body || {}).props || {};
+    assertServerPort(server, props['server-port'], ctx.user, currentServerPort(server));
+    const result = filesCore.writeProps(server, props);
     db.audit({ action: 'file.props.write', actorId: ctx.user.id, actorName: ctx.user.username, target: server.name });
     return result;
   });
@@ -1159,6 +1206,9 @@ function createApi(deps) {
     permit(ctx.user, server, 'files');
     const { path: rel, content } = ctx.body || {};
     if (!rel) throw bad('Не указан путь');
+    if (path.basename(String(rel)) === 'server.properties') {
+      assertServerPort(server, serverPortFromContent(content), ctx.user, currentServerPort(server));
+    }
     const result = filesCore.write(server, rel, String(content ?? ''));
     db.audit({ action: 'file.write', actorId: ctx.user.id, actorName: ctx.user.username, target: server.name, meta: { path: rel } });
     return result;
@@ -1184,7 +1234,16 @@ function createApi(deps) {
     const server = db.serverById(ctx.params.id);
     if (!server) throw notFound();
     permit(ctx.user, server, 'files');
-    return filesCore.rename(server, String((ctx.body || {}).path || ''), String((ctx.body || {}).name || ''));
+    const newName = String((ctx.body || {}).name || '');
+    if (newName === 'server.properties' && !auth.isAdmin(ctx.user)) {
+      try {
+        const file = filesCore.read(server, String((ctx.body || {}).path || ''));
+        assertServerPort(server, serverPortFromContent(file.content), ctx.user);
+      } catch (err) {
+        if (err && err.status) throw err;
+      }
+    }
+    return filesCore.rename(server, String((ctx.body || {}).path || ''), newName);
   });
 
   route('POST', '/api/servers/:id/files/delete', (ctx) => {
@@ -1213,6 +1272,9 @@ function createApi(deps) {
     if (!name) throw bad('Не указано имя файла');
     if (server.suspended) throw conflict('Сервер приостановлен');
     const buf = await readBody(ctx.req, 256 * 1024 * 1024);
+    if (name === 'server.properties') {
+      assertServerPort(server, serverPortFromContent(buf.toString('utf8')), ctx.user, currentServerPort(server));
+    }
     const result = filesCore.upload(server, rel, name, buf);
     db.audit({ action: 'file.upload', actorId: ctx.user.id, actorName: ctx.user.username, target: server.name, meta: { name, size: result.size } });
     return result;

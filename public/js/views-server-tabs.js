@@ -160,14 +160,17 @@ export async function startupTab(ctx, data) {
             <button class="btn sm" id="prop-add" type="button">${icon('plus', 13)} Добавить</button>
           </div>
           <div id="props-list" class="stack" style="gap:6px;max-height:46vh;overflow:auto">
-            ${keys.length ? keys.map((k) => `
+            ${keys.length ? keys.map((k) => {
+              const locked = k === 'server-port' && !server.isAdmin;
+              return `
               <div class="row prop-row" style="gap:8px">
-                <span class="mono small" style="width:180px;flex:none">${esc(k)}</span>
-                <input class="input mono" data-prop="${esc(k)}" value="${esc(props[k])}" style="flex:1" />
-                <button class="btn sm ghost danger" data-prop-del="${esc(k)}" title="Удалить" type="button">${icon('trash', 13)}</button>
-              </div>`).join('') : '<div class="tiny dim">Свойств нет.</div>'}
+                <span class="mono small" style="width:180px;flex:none">${esc(k)}${locked ? ` ${icon('lock', 11)}` : ''}</span>
+                <input class="input mono" data-prop="${esc(k)}" value="${esc(props[k])}" style="flex:1" ${locked ? 'disabled title="server-port задаётся панелью"' : ''} />
+                ${locked ? '' : `<button class="btn sm ghost danger" data-prop-del="${esc(k)}" title="Удалить" type="button">${icon('trash', 13)}</button>`}
+              </div>`;
+            }).join('') : '<div class="tiny dim">Свойств нет.</div>'}
           </div>
-          <div class="hint">Значения с не-ASCII символами экранируются как \\uXXXX. Изменения применятся при следующем запуске.</div>
+          <div class="hint">Значения с не-ASCII символами экранируются как \\uXXXX. Изменения применятся при следующем запуске.${server.isAdmin ? '' : ' <b>server-port</b> задаётся панелью (основной порт сервера) и заблокирован для изменения.'}</div>
           <div class="row">
             <button class="btn primary" id="props-save">${icon('save', 14)} Сохранить server.properties</button>
           </div>
@@ -218,19 +221,25 @@ export async function startupTab(ctx, data) {
     mount(root) {
       const list = root.querySelector('#props-list');
       const addRow = (key, value) => {
+        const locked = key === 'server-port' && !server.isAdmin;
         const empty = list.querySelector('.tiny.dim');
         if (empty) empty.remove();
         const row = document.createElement('div');
         row.className = 'row prop-row';
         row.style.gap = '8px';
-        row.innerHTML = `<span class="mono small" style="width:180px;flex:none">${esc(key)}</span><input class="input mono" data-prop="${esc(key)}" value="${esc(value)}" style="flex:1" /><button class="btn sm ghost danger" data-prop-del="${esc(key)}" title="Удалить" type="button">${icon('trash', 13)}</button>`;
+        row.innerHTML = `<span class="mono small" style="width:180px;flex:none">${esc(key)}${locked ? ` ${icon('lock', 11)}` : ''}</span><input class="input mono" data-prop="${esc(key)}" value="${esc(value)}" style="flex:1" ${locked ? 'disabled title="server-port задаётся панелью"' : ''} />${locked ? '' : `<button class="btn sm ghost danger" data-prop-del="${esc(key)}" title="Удалить" type="button">${icon('trash', 13)}</button>`}`;
         list.appendChild(row);
-        row.querySelector('[data-prop-del]').addEventListener('click', () => row.remove());
+        const delBtn = row.querySelector('[data-prop-del]');
+        if (delBtn) delBtn.addEventListener('click', () => row.remove());
       };
       root.querySelector('#prop-add')?.addEventListener('click', () => {
         const k = root.querySelector('#prop-key').value.trim();
         const v = root.querySelector('#prop-value').value;
         if (!k) return;
+        if (k === 'server-port' && !server.isAdmin) {
+          toast('server-port заблокирован', 'Порт задаётся панелью и меняется только администратором', 'warn');
+          return;
+        }
         addRow(k, v);
         root.querySelector('#prop-key').value = '';
         root.querySelector('#prop-value').value = '';
@@ -509,8 +518,6 @@ export async function scheduleTab(ctx, data) {
 export async function settingsTab(ctx, data) {
   const server = data.server;
   const isAdmin = server.isAdmin;
-  const ports = data.availablePorts || [];
-  const assigned = server.allocations || [];
   let users = [];
   if (isAdmin) {
     try { users = (await api.get('/api/users')).users; } catch { users = []; }
@@ -555,27 +562,6 @@ export async function settingsTab(ctx, data) {
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-head"><div class="panel-title">${icon('network', 15)} Порты и аллокации</div><span class="chip">${assigned.length} / ${(ctx.me.limits && ctx.me.limits.ports) || 2}</span></div>
-        <div class="card-body stack">
-          ${assigned.map((a) => `
-            <div class="row" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px">
-              <span class="mono">${esc(a.ip)}:${esc(a.port)}</span>
-              ${a.primary ? '<span class="pill accent" style="height:20px">основной</span>' : ''}
-              <span class="right row" style="gap:4px">
-                ${!a.primary ? `<button class="btn sm ghost" data-port-primary="${a.id}" title="Сделать основным">${icon('flag', 13)}</button>` : ''}
-                ${!a.primary ? `<button class="btn sm ghost danger" data-port-remove="${a.id}" title="Освободить">${icon('x', 13)}</button>` : ''}
-              </span>
-            </div>`).join('')}
-          <div class="row">
-            <select class="select" id="port-select" style="flex:1" ${ports.filter((p) => !p.assigned).length ? '' : 'disabled'}>
-              ${ports.filter((p) => !p.assigned).map((p) => `<option value="${p.id}">${esc(p.ip)}:${esc(p.port)}</option>`).join('') || '<option>Свободных портов нет</option>'}
-            </select>
-            <button class="btn" id="port-add" ${ports.filter((p) => !p.assigned).length ? '' : 'disabled'}>${icon('plus', 14)} Добавить</button>
-          </div>
-          <div class="hint">Основной порт задаёт переменную <span class="mono">{{PORT}}</span> в команде запуска. Дополнительные порты — для плагинов, RCON и веб-панелей.</div>
-        </div>
-      </div>
     </div>
 
     ${isAdmin ? `
@@ -665,36 +651,6 @@ export async function settingsTab(ctx, data) {
           toast('Сохранено', 'Настройки сервера обновлены', 'ok');
           ctx.refresh();
         } catch (err) { toast('Ошибка', err.message, 'err'); }
-      });
-
-      const portAdd = root.querySelector('#port-add');
-      if (portAdd) {
-        portAdd.addEventListener('click', async () => {
-          const select = root.querySelector('#port-select');
-          try {
-            await api.post(`/api/servers/${server.id}/allocations`, { allocationId: select.value });
-            toast('Порт добавлен', '', 'ok');
-            ctx.refresh();
-          } catch (err) { toast('Ошибка', err.message, 'err'); }
-        });
-      }
-      root.querySelectorAll('[data-port-primary]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          try {
-            await api.post(`/api/servers/${server.id}/allocations`, { allocationId: btn.dataset.portPrimary, primary: true });
-            toast('Основной порт обновлён', '', 'ok');
-            ctx.refresh();
-          } catch (err) { toast('Ошибка', err.message, 'err'); }
-        });
-      });
-      root.querySelectorAll('[data-port-remove]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          try {
-            await api.del(`/api/servers/${server.id}/allocations/${btn.dataset.portRemove}`);
-            toast('Порт освобождён', '', 'ok');
-            ctx.refresh();
-          } catch (err) { toast('Ошибка', err.message, 'err'); }
-        });
       });
 
       if (!isAdmin) return () => { };
