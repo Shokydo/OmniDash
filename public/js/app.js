@@ -167,7 +167,12 @@ function startApp() {
     </aside>
     <div class="main">
       <header class="topbar">
-        <nav class="topnav" id="nav"></nav>
+        <button class="icon-btn apps-btn" id="apps-btn" title="Все функции">${icon('apps', 16)}</button>
+        <div class="topnav-wrap">
+          <button class="nav-arrow" id="nav-prev" title="Назад">${icon('chevronLeft', 14)}</button>
+          <nav class="topnav" id="nav"></nav>
+          <button class="nav-arrow" id="nav-next" title="Вперёд">${icon('chevronRight', 14)}</button>
+        </div>
         <div class="top-actions">
           <button class="search-btn" id="search-open">
             ${icon('search', 14)}<span>Поиск и команды</span><span class="kbd">⌘K</span>
@@ -192,6 +197,7 @@ function startApp() {
             </div>
           </div>
         </div>
+        <div class="apps-menu hidden" id="apps-menu"></div>
       </header>
       <main class="content" id="content"></main>
     </div>
@@ -203,6 +209,28 @@ function startApp() {
   connectSSE();
   document.getElementById('nav')?.addEventListener('click', () => document.body.classList.remove('nav-open'));
   document.getElementById('search-open')?.addEventListener('click', openPalette);
+  // Кнопка «9 квадратиков» — все функции; стрелки — скролл навигации влево/вправо.
+  const appsBtn = document.getElementById('apps-btn');
+  const appsMenu = document.getElementById('apps-menu');
+  if (appsBtn && appsMenu) {
+    appsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      appsMenu.classList.toggle('hidden');
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#apps-menu') && !e.target.closest('#apps-btn')) appsMenu.classList.add('hidden');
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') appsMenu.classList.add('hidden');
+    });
+    appsMenu.querySelectorAll('a').forEach((a) => {
+      a.addEventListener('click', () => appsMenu.classList.add('hidden'));
+    });
+  }
+  const navEl = document.getElementById('nav');
+  const scrollNav = (dir) => { if (navEl) navEl.scrollBy({ left: dir * 220, behavior: 'smooth' }); };
+  document.getElementById('nav-prev')?.addEventListener('click', () => scrollNav(-1));
+  document.getElementById('nav-next')?.addEventListener('click', () => scrollNav(1));
   const profileBtn = document.getElementById('profile-btn');
   const profileDropdown = document.getElementById('profile-dropdown');
   if (profileBtn && profileDropdown) {
@@ -269,11 +297,30 @@ function navFor(routeName, hash) {
   return all.join('');
 }
 
+function appsMenuFor(routeName) {
+  const sections = [];
+  for (const group of NAV) {
+    if (group.admin && !isAdmin()) continue;
+    const items = group.items.filter((it) => !it.admin || isAdmin());
+    if (!items.length) continue;
+    sections.push(`<div class="apps-section">${esc(group.section)}</div><div class="apps-grid">${
+      items.map((it) => {
+        const active = routeName === it.id || (it.id === 'servers' && routeName === 'server');
+        const label = it.id === 'servers' && !isAdmin() ? 'Мои серверы' : it.label;
+        return `<a class="apps-tile ${active ? 'active' : ''}" href="${it.href}">${icon(it.icon, 18)}<span>${esc(label)}</span></a>`;
+      }).join('')
+    }</div>`);
+  }
+  return sections.join('');
+}
+
 function renderNav(hash = location.hash || '#/') {
   const nav = document.getElementById('nav');
   if (!nav) return;
   const parsed = parseRoute(hash);
   nav.innerHTML = navFor(parsed.name, hash);
+  const menu = document.getElementById('apps-menu');
+  if (menu) menu.innerHTML = appsMenuFor(parsed.name);
 }
 
 async function refreshServerCount() {
