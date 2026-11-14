@@ -35,6 +35,7 @@ const DEFAULT_SETTINGS = {
   sftp: { enabled: true, port: 2222 },
   portRandom: true,
   blockedPorts: [],
+  serverMax: { memory: 8192, disk: 20480, cpu: 400, ports: 4 },
 };
 
 const DEFAULT_DATA = () => ({

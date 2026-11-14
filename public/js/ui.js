@@ -318,15 +318,26 @@ export function ansiToHtml(input) {
 }
 
 /* ───────────────────────────── иконки действий ───────────────────────────── */
-export const powerButtons = (server, compact = false) => {
+export const powerButtons = (server, compact = false, allowed = null) => {
   const running = ['running', 'starting'].includes(server.status);
   const busy = ['starting', 'stopping'].includes(server.status);
-  return `<div class="power-btns">
-    <button class="play" data-power="start" title="Запустить" ${running || server.suspended ? 'disabled' : ''}>${icon('play', 12)}</button>
-    <button data-power="restart" title="Перезапустить" ${!running || busy || server.suspended ? 'disabled' : ''}>${icon('restart', 12)}</button>
-    <button class="stop" data-power="stop" title="Остановить" ${!running || server.suspended ? 'disabled' : ''}>${icon('stop', 12)}</button>
-    ${compact ? '' : `<button data-power="kill" title="Принудительно убить" ${!running || server.suspended ? 'disabled' : ''}>${icon('power', 12)}</button>`}
-  </div>`;
+  const can = (action) => !allowed || allowed.includes(action);
+  const btns = [];
+  if (can('start')) btns.push(`<button class="play" data-power="start" title="Запустить" ${running || server.suspended ? 'disabled' : ''}>${icon('play', 12)}</button>`);
+  if (can('restart')) btns.push(`<button data-power="restart" title="Перезапустить" ${!running || busy || server.suspended ? 'disabled' : ''}>${icon('restart', 12)}</button>`);
+  if (can('stop')) btns.push(`<button class="stop" data-power="stop" title="Остановить" ${!running || server.suspended ? 'disabled' : ''}>${icon('stop', 12)}</button>`);
+  if (!compact && can('kill')) btns.push(`<button data-power="kill" title="Принудительно убить" ${!running || server.suspended ? 'disabled' : ''}>${icon('power', 12)}</button>`);
+  if (!btns.length) return '';
+  return `<div class="power-btns">${btns.join('')}</div>`;
+};
+
+/** Действия питания, доступные по правам сервера (permissions из serverJson). */
+export const powerActions = (server) => {
+  const perms = server && server.permissions;
+  if (!perms) return null;
+  if (server.isAdmin || server.isOwner) return null;
+  const map = { start: 'power.start', stop: 'power.stop', restart: 'power.restart', kill: 'power.kill' };
+  return Object.keys(map).filter((a) => perms.includes(map[a]));
 };
 
 export const expiryChip = (days) => {

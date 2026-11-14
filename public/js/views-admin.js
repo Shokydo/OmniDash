@@ -1164,6 +1164,19 @@ export async function settingsView(ctx) {
         </div>
 
         <div class="form-section">
+          <h3>Максимумы сервера</h3>
+          <p class="hint">Потолки на один сервер: больше выдать нельзя — ни при создании, ни в настройках сервера.</p>
+          <div class="stack">
+            <div class="form-grid">
+              <div class="field"><label>Макс. память</label><div class="input-group"><input class="input" type="number" name="maxMemoryGb" value="${(((s.serverMax && s.serverMax.memory) || 8192) / 1024).toFixed(1)}" min="0.125" step="0.5" /><span class="input-suffix">ГБ</span></div></div>
+              <div class="field"><label>Макс. диск</label><div class="input-group"><input class="input" type="number" name="maxDiskGb" value="${(((s.serverMax && s.serverMax.disk) || 20480) / 1024).toFixed(1)}" min="0.0625" step="1" /><span class="input-suffix">ГБ</span></div></div>
+              <div class="field"><label>Макс. CPU</label><div class="input-group"><input class="input" type="number" name="maxCpuCores" value="${(((s.serverMax && s.serverMax.cpu) || 400) / 100).toFixed(2)}" min="0.05" step="0.25" /><span class="input-suffix">ядер</span></div></div>
+              <div class="field"><label>Макс. портов на сервер</label><div class="input-group"><input class="input" type="number" name="maxPorts" value="${(s.serverMax && s.serverMax.ports) || 4}" min="1" max="100" /><span class="input-suffix">шт.</span></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
           <h3>Сроки аренды</h3>
           <p class="hint">Автоматическая приостановка и напоминания.</p>
           <div class="stack">
@@ -1317,6 +1330,12 @@ export async function settingsView(ctx) {
             accent: v.accent,
             defaultLimits,
             sftp: { enabled: v.sftpEnabled, port: v.sftpPort },
+            serverMax: {
+              memory: Math.round(Number(v.maxMemoryGb || 8) * 1024),
+              disk: Math.round(Number(v.maxDiskGb || 20) * 1024),
+              cpu: Math.round(Number(v.maxCpuCores || 4) * 100),
+              ports: Number(v.maxPorts || 4),
+            },
           });
           toast('Настройки сохранены', '', 'ok');
           ctx.applySettings && ctx.applySettings(res.settings);

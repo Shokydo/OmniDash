@@ -448,6 +448,7 @@ function createApi(deps) {
       registrationOpen: !!settings.registrationOpen,
       expiryDays: settings.expiryDays,
       defaultLimits: settings.defaultLimits,
+      serverMax: serversCore.serverMax(),
       motd: settings.motd || '',
       theme: settings.theme,
       accent: settings.accent,
@@ -842,6 +843,8 @@ function createApi(deps) {
     if (body.limits && isAdmin) {
       const previous = { ...server.limits };
       const limits = serversCore.normalizeLimits({ ...server.limits, ...body.limits });
+      const maxCheck = serversCore.checkServerMax(limits);
+      if (!maxCheck.ok) throw conflict(maxCheck.error);
       const owner = db.userById(server.ownerId);
       const check = serversCore.checkUserLimits(owner, limits, server.id);
       if (!check.ok) throw conflict(check.error);
@@ -891,11 +894,13 @@ function createApi(deps) {
   route('POST', '/api/servers/:id/power', async (ctx) => {
     const server = db.serverById(ctx.params.id);
     if (!server) throw notFound();
-    permit(ctx.user, server, 'control');
+    const action = String((ctx.body || {}).action || '');
+    const needPerm = { start: 'power.start', stop: 'power.stop', restart: 'power.restart', kill: 'power.kill' }[action];
+    if (needPerm) permit(ctx.user, server, needPerm);
+    else permit(ctx.user, server, 'power.start');
     if (server.suspended) throw conflict('Сервер приостановлен — управление недоступно');
     const node = db.nodeById(server.nodeId);
     if (node && !nodeIsLocal(node)) throw conflict(`Узел «${node.name}» офлайн: запуск только на локальном узле`);
-    const action = String((ctx.body || {}).action || '');
     let state;
     if (action === 'start') {
       if (!daemon.isOnline(server.id) && db.data.servers.filter((s) => s.nodeId === server.nodeId).length > 0) {
@@ -1042,7 +1047,15 @@ function createApi(deps) {
     const access = serversCore.access(ctx.user, server);
     if (!access.ok) throw notFound();
     if (!access.isAdmin && !access.perms.includes('users')) throw forbidden('Нет права управлять доступами');
-    const { userId, perms } = ctx.body || {};
+    const body = ctx.body || {};
+    let userId = body.userId;
+    if (!userId && body.login) {
+      const login = String(body.login).trim().toLowerCase();
+      const found = db.data.users.find((u) => u.username.toLowerCase() === login || String(u.email || '').toLowerCase() === login);
+      if (!found) throw bad('Пользователь с таким никнеймом или почтой не найден');
+      userId = found.id;
+    }
+    const { perms } = body;
     const list = serversCore.setSubuser(server, userId, perms);
     serverChanged(server.id);
     return { subusers: list };
@@ -1088,10 +1101,9 @@ function createApi(deps) {
       serverChanged(server.id);
       return { allocation: alloc };
     }
-    const owner = db.userById(server.ownerId);
-    const maxPorts = int((owner && owner.limits && owner.limits.ports) || db.data.settings.defaultLimits.ports || 2);
-    if (!auth.isAdmin(ctx.user) && (server.allocations || []).length >= maxPorts) {
-      throw conflict(`Лимит портов: ${maxPorts}`);
+    const maxPorts = serversCore.serverMax().ports;
+    if ((server.allocations || []).length >= maxPorts) {
+      throw conflict(`Максимум портов на сервер: ${maxPorts}`);
     }
     const alloc = serversCore.assignAllocation(server.id, allocationId, primary !== false);
     if (primary !== false) syncServerPort(server);
@@ -1861,6 +1873,15 @@ function createApi(deps) {
     }
     if (body.defaultEggId !== undefined) {
       s.defaultEggId = body.defaultEggId ? String(body.defaultEggId) : null;
+    }
+    if (body.serverMax && typeof body.serverMax === 'object') {
+      const cur = { memory: 8192, disk: 20480, cpu: 400, ports: 4, ...(s.serverMax || {}) };
+      s.serverMax = {
+        memory: clamp(int(body.serverMax.memory, cur.memory), 128, 1024 * 512),
+        disk: clamp(int(body.serverMax.disk, cur.disk), 64, 1024 * 1024 * 4),
+        cpu: clamp(int(body.serverMax.cpu, cur.cpu), 5, 1600),
+        ports: clamp(int(body.serverMax.ports, cur.ports), 1, 100),
+      };
     }
     if (body.portRandom !== undefined) s.portRandom = !!body.portRandom;
     if (Array.isArray(body.blockedPorts)) {

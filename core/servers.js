@@ -8,11 +8,14 @@ const path = require('path');
 const db = require('./db');
 const { uuid, clamp, int, now } = require('./util');
 
-const ALL_PERMS = ['console', 'control', 'files', 'backups', 'startup', 'settings', 'users', 'schedule', 'allocations'];
+const ALL_PERMS = ['console', 'power.start', 'power.stop', 'power.restart', 'power.kill', 'files', 'backups', 'startup', 'settings', 'users', 'schedule', 'allocations'];
 
 const PERM_LABELS = {
   console: 'Консоль и команды',
-  control: 'Старт / стоп / рестарт',
+  'power.start': 'Запуск сервера',
+  'power.stop': 'Остановка сервера',
+  'power.restart': 'Перезапуск сервера',
+  'power.kill': 'Принудительное завершение',
   files: 'Файловый менеджер',
   backups: 'Резервные копии',
   startup: 'Переменные запуска',
@@ -21,6 +24,36 @@ const PERM_LABELS = {
   schedule: 'Расписание задач',
   allocations: 'Порты и аллокации',
 };
+
+/** Старое общее право control раскрывается в отдельные power.* */
+function expandPerms(perms) {
+  const out = [];
+  for (const p of perms || []) {
+    if (p === 'control') out.push('power.start', 'power.stop', 'power.restart', 'power.kill');
+    else out.push(p);
+  }
+  return out;
+}
+
+/** Максимумы на один сервер (настройки панели). */
+function serverMax() {
+  const s = (db.data.settings && db.data.settings.serverMax) || {};
+  return {
+    memory: clamp(int(s.memory, 8192), 128, 1024 * 512),
+    disk: clamp(int(s.disk, 20480), 64, 1024 * 1024 * 4),
+    cpu: clamp(int(s.cpu, 400), 5, 1600),
+    ports: clamp(int(s.ports, 4), 1, 100),
+  };
+}
+
+/** Проверка лимитов сервера против максимумов панели. */
+function checkServerMax(limits) {
+  const max = serverMax();
+  if (limits.memory > max.memory) return { ok: false, error: `Память превышает максимум на сервер: ${Math.round(max.memory / 1024)} ГБ` };
+  if (limits.disk > max.disk) return { ok: false, error: `Диск превышает максимум на сервер: ${Math.round(max.disk / 1024)} ГБ` };
+  if (limits.cpu > max.cpu) return { ok: false, error: `CPU превышает максимум на сервер: ${max.cpu / 100} ядер` };
+  return { ok: true };
+}
 
 function ownedServers(userId) {
   return db.data.servers.filter((s) => s.ownerId === userId);
@@ -39,7 +72,7 @@ function access(user, server) {
   if (user.role === 'admin') return { ok: true, perms: ALL_PERMS.slice(), isOwner: server.ownerId === user.id, isAdmin: true };
   if (server.ownerId === user.id) return { ok: true, perms: ALL_PERMS.slice(), isOwner: true, isAdmin: false };
   const entry = subuserEntry(server, user.id);
-  if (entry) return { ok: true, perms: entry.perms.filter((p) => ALL_PERMS.includes(p)), isOwner: false, isAdmin: false };
+  if (entry) return { ok: true, perms: expandPerms(entry.perms).filter((p) => ALL_PERMS.includes(p)), isOwner: false, isAdmin: false };
   return { ok: false, perms: [], isOwner: false, isAdmin: false };
 }
 
@@ -203,6 +236,8 @@ function createServer({ owner, egg, node, name, description = '', limits, enviro
     throw Object.assign(new Error('Имя: 2–60 символов, буквы/цифры/пробел/точка/дефис'), { status: 400 });
   }
   const lim = normalizeLimits(limits);
+  const maxCheck = checkServerMax(lim);
+  if (!maxCheck.ok) throw Object.assign(new Error(maxCheck.error), { status: 409 });
   const check = checkUserLimits(owner, lim);
   if (!check.ok) throw Object.assign(new Error(check.error), { status: 409 });
 
@@ -386,6 +421,9 @@ module.exports = {
   releaseAllocation,
   normalizeLimits,
   createServer,
+  serverMax,
+  checkServerMax,
+  expandPerms,
   deleteServer,
   suspend,
   unsuspend,

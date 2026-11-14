@@ -3,7 +3,7 @@ import { api } from './api.js';
 import { icon } from './icons.js';
 import {
   esc, fmtBytes, fmtMb, fmtDuration, fmtDateTime, statusPill, powerButtons, expiryChip,
-  meter, emptyState, modal, toast, formDialog, serializeForm, avatar, serverIcon,
+  meter, emptyState, modal, toast, formDialog, serializeForm, avatar, serverIcon, powerActions,
 } from './ui.js';
 
 export function serverCard(server) {
@@ -39,7 +39,7 @@ export function serverCard(server) {
       ${meter(diskPct, diskPct > 90 ? 'rose' : '')}
     </div>
     <div class="server-foot">
-      ${powerButtons(server)}
+      ${powerButtons(server, false, powerActions(server))}
       ${expiryChip(server.daysLeft)}
       <a class="btn sm ghost right" href="#/servers/${server.id}/console" style="margin-left:auto">Открыть ${icon('chevronRight', 13)}</a>
     </div>
@@ -66,7 +66,7 @@ export function serverRow(server) {
     <td class="mono tiny">${server.allocation ? esc(server.allocation.port) : '—'}</td>
     <td class="small nowrap">${server.limits.memory} МБ · ${server.limits.disk / 1024} ГБ</td>
     <td>${expiryChip(server.daysLeft)}</td>
-    <td class="right-cell"><div class="actions-cell">${powerButtons(server, true)}<a class="btn sm ghost" href="#/servers/${server.id}/console">${icon('chevronRight', 14)}</a></div></td>
+    <td class="right-cell"><div class="actions-cell">${powerButtons(server, true, powerActions(server))}<a class="btn sm ghost" href="#/servers/${server.id}/console">${icon('chevronRight', 14)}</a></div></td>
   </tr>`;
 }
 
@@ -258,16 +258,22 @@ export async function openCreateServer(ctx, opts = {}) {
         </div>
       </div>
       <div class="field">
-        <label>Память (МБ)</label>
-        <input class="input" type="number" name="memory" value="${Math.min(2048, limits.memory || 2048)}" min="128" step="128" />
+        <label>Память (ГБ) <span class="dim">— макс. ${Math.round(((ctx.meta && ctx.meta.serverMax && ctx.meta.serverMax.memory) || 8192) / 1024)} ГБ</span></label>
+        <div class="input-group">
+          <input class="input" type="number" name="memoryGb" value="${(Math.min(2048, limits.memory || 2048) / 1024).toFixed(1)}" min="0.125" step="0.5" />
+          <span class="input-suffix">ГБ</span>
+        </div>
       </div>
       <div class="field">
         <label>Диск (МБ)</label>
         <input class="input" type="number" name="disk" value="${Math.min(10240, limits.disk || 10240)}" min="64" step="256" />
       </div>
       <div class="field">
-        <label>CPU (%)</label>
-        <input class="input" type="number" name="cpu" value="${Math.min(100, limits.cpu || 100)}" min="5" max="1600" step="5" />
+        <label>CPU (ядра) <span class="dim">— макс. ${((ctx.meta && ctx.meta.serverMax && ctx.meta.serverMax.cpu) || 400) / 100} ядер</span></label>
+        <div class="input-group">
+          <input class="input" type="number" name="cpuCores" value="${(Math.min(100, limits.cpu || 100) / 100).toFixed(2)}" min="0.05" step="0.25" />
+          <span class="input-suffix">ядер</span>
+        </div>
       </div>
       <div class="field span-2">
         <label>Описание <span class="dim">— необязательно</span></label>
@@ -332,9 +338,9 @@ export async function openCreateServer(ctx, opts = {}) {
             ownerId: values.ownerId,
             eggId: values.eggId,
             nodeId: values.nodeId,
-            memory: values.memory,
+            memory: Math.round(Number(values.memoryGb || 2) * 1024),
             disk: values.disk,
-            cpu: values.cpu,
+            cpu: Math.round(Number(values.cpuCores || 1) * 100),
             expiresDays: values.expiresDays,
             description: values.description,
             start: !!values.startNow,
@@ -407,16 +413,22 @@ export async function openImportServer(ctx) {
         </select>
       </div>
       <div class="field">
-        <label>Память (МБ)</label>
-        <input class="input" type="number" name="memory" value="${Math.min(2048, limits.memory || 2048)}" min="128" step="128" />
+        <label>Память (ГБ) <span class="dim">— макс. ${Math.round(((ctx.meta && ctx.meta.serverMax && ctx.meta.serverMax.memory) || 8192) / 1024)} ГБ</span></label>
+        <div class="input-group">
+          <input class="input" type="number" name="memoryGb" value="${(Math.min(2048, limits.memory || 2048) / 1024).toFixed(1)}" min="0.125" step="0.5" />
+          <span class="input-suffix">ГБ</span>
+        </div>
       </div>
       <div class="field">
         <label>Диск (МБ)</label>
         <input class="input" type="number" name="disk" value="${Math.min(10240, limits.disk || 10240)}" min="64" step="256" />
       </div>
       <div class="field">
-        <label>CPU (%)</label>
-        <input class="input" type="number" name="cpu" value="${Math.min(100, limits.cpu || 100)}" min="5" max="1600" step="5" />
+        <label>CPU (ядра) <span class="dim">— макс. ${((ctx.meta && ctx.meta.serverMax && ctx.meta.serverMax.cpu) || 400) / 100} ядер</span></label>
+        <div class="input-group">
+          <input class="input" type="number" name="cpuCores" value="${(Math.min(100, limits.cpu || 100) / 100).toFixed(2)}" min="0.05" step="0.25" />
+          <span class="input-suffix">ядер</span>
+        </div>
       </div>
       <div class="field">
         <label>Срок аренды</label>
@@ -489,9 +501,9 @@ export async function openImportServer(ctx) {
             name: values.name.trim(),
             eggId: values.eggId || '',
             ownerId: values.ownerId || '',
-            memory: String(values.memory || 2048),
+            memory: String(Math.round(Number(values.memoryGb || 2) * 1024)),
             disk: String(values.disk || 10240),
-            cpu: String(values.cpu || 100),
+            cpu: String(Math.round(Number(values.cpuCores || 1) * 100)),
             expiresDays: String(values.expiresDays || 30),
             description: values.description || '',
           });

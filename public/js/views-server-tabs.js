@@ -289,7 +289,7 @@ export async function accessTab(ctx, data) {
     <div class="card">
       <div class="card-head">
         <div class="panel-title">${icon('users', 15)} Пользователи с доступом <span class="chip">${subusers.length}</span></div>
-        ${server.permissions.includes('users') || server.isAdmin ? `<button class="btn sm primary" id="add-subuser" ${!candidates.length ? 'disabled' : ''}>${icon('plus', 13)} Выдать доступ</button>` : ''}
+        ${server.permissions.includes('users') || server.isAdmin ? `<button class="btn sm primary" id="add-subuser">${icon('plus', 13)} Выдать доступ</button>` : ''}
       </div>
       <div class="table-wrap">
         <table class="table">
@@ -337,13 +337,14 @@ export async function accessTab(ctx, data) {
             subtitle: server.name,
             body: `
               <div class="stack">
-                <div class="field"><label>Пользователь</label>
-                  <select class="select" id="su-user">${candidates.map((u) => `<option value="${u.id}">${esc(u.username)}</option>`).join('')}</select>
+                <div class="field"><label>Никнейм или e-mail</label>
+                  <input class="input" id="su-login" placeholder="например, steve или steve@example.com" autocomplete="off" autofocus />
+                  <span class="hint">Введите никнейм или почту пользователя — он найдётся автоматически.</span>
                 </div>
                 <div class="field"><label>Права</label>
                   <div class="stack sm">
                     ${allPerms.map((p) => `
-                      <label class="check"><input type="checkbox" value="${p}" ${['console', 'control'].includes(p) ? 'checked' : ''} />
+                      <label class="check"><input type="checkbox" value="${p}" ${['console', 'power.start'].includes(p) ? 'checked' : ''} />
                         <span><span class="check-title">${esc(permLabels[p] || p)}</span><span class="check-desc mono">${p}</span></span>
                       </label>`).join('')}
                   </div>
@@ -352,11 +353,12 @@ export async function accessTab(ctx, data) {
             footer: `<button class="btn" data-close>Отмена</button><button class="btn primary" id="su-ok">Выдать доступ</button>`,
             onMount: (overlay, close) => {
               overlay.querySelector('#su-ok').addEventListener('click', async () => {
-                const userId = overlay.querySelector('#su-user').value;
+                const login = overlay.querySelector('#su-login').value.trim();
                 const perms = [...overlay.querySelectorAll('input[type=checkbox]:checked')].map((c) => c.value);
+                if (!login) { toast('Укажите никнейм или почту', '', 'warn'); return; }
                 if (!perms.length) { toast('Выберите права', 'Минимум одно право', 'warn'); return; }
                 try {
-                  await api.post(`/api/servers/${server.id}/subusers`, { userId, perms });
+                  await api.post(`/api/servers/${server.id}/subusers`, { login, perms });
                   toast('Доступ выдан', '', 'ok');
                   close();
                   ctx.refresh();
@@ -570,9 +572,9 @@ export async function settingsTab(ctx, data) {
         <div class="card-head"><div class="panel-title">${icon('sliders', 15)} Лимиты ресурсов</div><span class="chip">админ</span></div>
         <div class="card-body stack">
           <div class="form-grid">
-            <div class="field"><label>Память (МБ)</label><input class="input" type="number" name="memory" value="${server.limits.memory}" min="128" step="128" /></div>
+            <div class="field"><label>Память (ГБ)</label><div class="input-group"><input class="input" type="number" name="memoryGb" value="${(server.limits.memory / 1024).toFixed(1)}" min="0.125" step="0.5" /><span class="input-suffix">ГБ</span></div></div>
             <div class="field"><label>Диск (МБ)</label><input class="input" type="number" name="disk" value="${server.limits.disk}" min="64" step="256" /></div>
-            <div class="field"><label>CPU (%)</label><input class="input" type="number" name="cpu" value="${server.limits.cpu}" min="5" max="1600" step="5" /></div>
+            <div class="field"><label>CPU (ядра)</label><div class="input-group"><input class="input" type="number" name="cpuCores" value="${(server.limits.cpu / 100).toFixed(2)}" min="0.05" step="0.25" /><span class="input-suffix">ядер</span></div></div>
             <div class="field"><label>Срок аренды</label>
               <div class="input-group"><input class="input" type="number" name="expiresDays" placeholder="+ дней" min="1" /><span class="input-suffix">дней</span></div>
             </div>
@@ -664,7 +666,7 @@ export async function settingsTab(ctx, data) {
             await api.patch(`/api/servers/${server.id}`, { expiresDays: values.expiresDays });
           }
           await api.patch(`/api/servers/${server.id}`, {
-            limits: { memory: values.memory, disk: values.disk, cpu: values.cpu },
+            limits: { memory: Math.round(Number(values.memoryGb || 2) * 1024), disk: values.disk, cpu: Math.round(Number(values.cpuCores || 1) * 100) },
           });
           toast('Лимиты сохранены', '', 'ok');
           ctx.refresh();

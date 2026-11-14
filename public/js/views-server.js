@@ -3,7 +3,7 @@ import { api } from './api.js';
 import { icon } from './icons.js';
 import {
   esc, fmtBytes, fmtMb, fmtDuration, fmtDateTime, statusPill, powerButtons, expiryChip,
-  meter, emptyState, modal, toast, confirmDialog, ansiToHtml, copy, avatar, serializeForm, serverIcon,
+  meter, emptyState, modal, toast, confirmDialog, ansiToHtml, copy, avatar, serializeForm, serverIcon, powerActions,
 } from './ui.js';
 import { areaChart, ring, historyValues } from './charts.js';
 import { backupsTab, startupTab, accessTab, scheduleTab, settingsTab } from './views-server-tabs.js';
@@ -24,7 +24,8 @@ export async function serverView(ctx) {
   const data = await api.get(`/api/servers/${ctx.params.id}`);
   const server = data.server;
   const perms = new Set(server.permissions || []);
-  const can = (p) => perms.has(p) || server.isAdmin;
+  const can = (p) => perms.has(p) || server.isAdmin
+    || (p === 'control' && ['power.start', 'power.stop', 'power.restart', 'power.kill'].some((x) => perms.has(x)));
   const availableTabs = TAB_DEFS.filter((t) => can(t.perm));
   const requested = ctx.params.tab || 'console';
   const tab = availableTabs.some((t) => t.id === requested) ? requested : (availableTabs[0] || { id: 'console' }).id;
@@ -72,7 +73,7 @@ export async function serverView(ctx) {
           <div class="hero-meta">${heroChips}</div>
         </div>
         <div class="hero-actions">
-          ${can('control') ? powerButtons(server) : ''}
+          ${can('control') ? powerButtons(server, false, powerActions(server)) : ''}
           ${can('settings') ? `<a class="btn sm" href="#/servers/${server.id}/settings">${icon('settings', 14)} Настройки</a>` : ''}
         </div>
       </div>
