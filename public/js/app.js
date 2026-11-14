@@ -26,14 +26,15 @@ const S = {
 
 const NAV = [
   {
-    section: 'Панель',
+    section: 'Личное',
     items: [
       { id: 'dashboard', label: 'Обзор', icon: 'dash', href: '#/' },
       { id: 'servers', label: 'Серверы', icon: 'servers', href: '#/servers', badge: 'servers' },
+      { id: 'profile', label: 'Профиль', icon: 'user', href: '#/profile' },
     ],
   },
   {
-    section: 'Управление',
+    section: 'Администрирование',
     admin: true,
     items: [
       { id: 'users', label: 'Пользователи', icon: 'users', href: '#/users' },
@@ -44,10 +45,11 @@ const NAV = [
   },
   {
     section: 'Система',
+    admin: true,
     items: [
-      { id: 'audit', label: 'Журнал', icon: 'activity', href: '#/audit', admin: true },
-      { id: 'updates', label: 'Обновления', icon: 'cloudDownload', href: '#/updates', admin: true },
-      { id: 'settings', label: 'Настройки', icon: 'settings', href: '#/settings', admin: true },
+      { id: 'audit', label: 'Журнал', icon: 'activity', href: '#/audit' },
+      { id: 'updates', label: 'Обновления', icon: 'cloudDownload', href: '#/updates' },
+      { id: 'settings', label: 'Настройки', icon: 'settings', href: '#/settings' },
     ],
   },
 ];
@@ -219,8 +221,9 @@ function navFor(routeName, hash) {
       ${items.map((it) => {
         const active = routeName === it.id || (it.id === 'servers' && routeName === 'server');
         const badge = it.badge === 'servers' && S.serversCount ? `<span class="count">${S.serversCount}</span>` : '';
+        const label = it.id === 'servers' && !isAdmin() ? 'Мои серверы' : it.label;
         return `<a class="nav-item ${active ? 'active' : ''}" href="${it.href}">
-          ${icon(it.icon, 17)}<span>${esc(it.label)}</span>${badge}
+          ${icon(it.icon, 17)}<span>${esc(label)}</span>${badge}
         </a>`;
       }).join('')}`;
   }).join('');

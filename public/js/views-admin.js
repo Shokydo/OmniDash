@@ -8,27 +8,6 @@ import {
 import { actionMeta, TONE_COLORS } from './labels.js';
 import { openCreateServer } from './views-servers.js';
 
-const LIMIT_FIELDS = [
-  ['servers', 'Серверы', 'шт'],
-  ['memory', 'Память', 'МБ'],
-  ['disk', 'Диск', 'МБ'],
-  ['cpu', 'CPU / сервер', '%'],
-  ['backups', 'Бэкапы', 'шт'],
-  ['ports', 'Порты / сервер', 'шт'],
-];
-
-const limitsFormHtml = (limits = {}) => `
-  <div class="form-grid">
-    ${LIMIT_FIELDS.map(([key, label, unit]) => `
-      <div class="field">
-        <label>${label}</label>
-        <div class="input-group">
-          <input class="input" type="number" name="lim_${key}" value="${Number(limits[key]) || 0}" min="0" />
-          <span class="input-suffix">${unit}</span>
-        </div>
-      </div>`).join('')}
-  </div>`;
-
 /* ═════════════════════════════ пользователи ═════════════════════════════ */
 
 export async function usersView(ctx) {
@@ -43,7 +22,7 @@ export async function usersView(ctx) {
       <div>
         <div class="eyebrow">администрирование</div>
         <h1>Пользователи</h1>
-        <p class="sub">Аккаунты, роли, лимиты и выдача серверов. Пароли хранятся только в виде scrypt-хеша.</p>
+        <p class="sub">Аккаунты, роли и выдача серверов. Лимиты задаются на каждом сервере. Пароли хранятся только в виде scrypt-хеша.</p>
       </div>
       <div class="page-actions">
         <button class="btn ghost" data-action="refresh">${icon('refresh', 15)} Обновить</button>
@@ -54,18 +33,18 @@ export async function usersView(ctx) {
     <div class="grid stats" style="margin-bottom:16px">
       <div class="card stat"><div class="stat-top"><span class="stat-label">Всего</span><span class="stat-icon">${icon('users', 14)}</span></div><div class="stat-value">${users.length}</div><div class="stat-foot"><span>аккаунтов</span></div></div>
       <div class="card stat"><div class="stat-top"><span class="stat-label">Админы</span><span class="stat-icon">${icon('shield', 14)}</span></div><div class="stat-value">${users.filter((u) => u.role === 'admin').length}</div><div class="stat-foot"><span>полный доступ</span></div></div>
-      <div class="card stat"><div class="stat-top"><span class="stat-label">Онлайн</span><span class="stat-icon" style="background:rgba(74,222,128,.1);color:#86efac;border-color:rgba(74,222,128,.2)">${icon('pulse', 14)}</span></div><div class="stat-value">${users.filter((u) => u.lastLoginAt && Date.now() - u.lastLoginAt < 900000).length}</div><div class="stat-foot"><span>за 15 минут</span></div></div>
-      <div class="card stat"><div class="stat-top"><span class="stat-label">Заблокированы</span><span class="stat-icon" style="background:rgba(251,113,133,.1);color:#fda4af;border-color:rgba(251,113,133,.2)">${icon('lock', 14)}</span></div><div class="stat-value">${users.filter((u) => u.suspended).length}</div><div class="stat-foot"><span>аккаунтов</span></div></div>
+      <div class="card stat"><div class="stat-top"><span class="stat-label">Онлайн</span><span class="stat-icon" style="background:rgba(255,255,255,.06);color:#fff;border-color:rgba(255,255,255,.18)">${icon('pulse', 14)}</span></div><div class="stat-value">${users.filter((u) => u.lastLoginAt && Date.now() - u.lastLoginAt < 900000).length}</div><div class="stat-foot"><span>за 15 минут</span></div></div>
+      <div class="card stat"><div class="stat-top"><span class="stat-label">Заблокированы</span><span class="stat-icon" style="background:rgba(255,255,255,.06);color:#a3a3a3;border-color:rgba(255,255,255,.18)">${icon('lock', 14)}</span></div><div class="stat-value">${users.filter((u) => u.suspended).length}</div><div class="stat-foot"><span>аккаунтов</span></div></div>
     </div>
 
     <div class="toolbar" style="margin-bottom:14px">
       <div class="search">${icon('search', 14)}<input class="input" id="users-search" placeholder="Поиск по логину или e-mail…" /></div>
-      <span class="chip right">по умолчанию: ${defaults.servers} серв. · ${fmtMb(defaults.memory)} · ${fmtMb(defaults.disk)}</span>
+      <span class="chip right">лимиты — на серверах</span>
     </div>
 
     <div class="card table-wrap">
       <table class="table">
-        <thead><tr><th>Пользователь</th><th>Роль</th><th>Серверы</th><th>Использование лимитов</th><th>Последний вход</th><th></th></tr></thead>
+        <thead><tr><th>Пользователь</th><th>Роль</th><th>Подключённые серверы</th><th>Последний вход</th><th></th></tr></thead>
         <tbody id="users-body"></tbody>
       </table>
     </div>
@@ -74,10 +53,8 @@ export async function usersView(ctx) {
   const renderRows = (host) => {
     const filtered = users.filter((u) => !search || `${u.username} ${u.email || ''}`.toLowerCase().includes(search));
     host.innerHTML = filtered.map((u) => {
-      const lim = u.limits || {};
       const usage = u.usage || {};
-      const memPct = lim.memory ? (usage.memory / lim.memory) * 100 : 0;
-      const srvPct = lim.servers ? (usage.servers / lim.servers) * 100 : 0;
+      const srvNames = (u.serverNames || []).slice(0, 3).join(', ');
       return `
       <tr data-user="${u.id}">
         <td>
@@ -90,19 +67,14 @@ export async function usersView(ctx) {
           </div>
         </td>
         <td><span class="tag ${u.role}">${u.role === 'admin' ? 'админ' : 'пользователь'}</span></td>
-        <td class="small"><b>${usage.servers || 0}</b> <span class="dim">/ ${lim.servers}</span></td>
-        <td style="min-width:190px">
-          <div class="row tiny dim" style="justify-content:space-between"><span>RAM ${fmtMb(usage.memory || 0)} / ${fmtMb(lim.memory)}</span><span>${Math.round(memPct)}%</span></div>
-          ${meter(memPct, memPct > 90 ? 'rose' : memPct > 70 ? 'amber' : '')}
-          <div class="row tiny dim" style="justify-content:space-between;margin-top:5px"><span>серверы ${usage.servers || 0} / ${lim.servers}</span><span>${Math.round(srvPct)}%</span></div>
-        </td>
+        <td class="small"><b>${usage.servers || 0}</b> ${srvNames ? `<span class="dim">· ${esc(srvNames)}${(u.serverNames || []).length > 3 ? '…' : ''}</span>` : '<span class="dim">· нет серверов</span>'}</td>
         <td class="tiny dim">${u.lastLoginAt ? timeAgo(u.lastLoginAt) : 'никогда'}</td>
         <td class="right-cell"><div class="actions-cell">
           <button class="btn sm ghost" data-edit-user="${u.id}" title="Изменить">${icon('edit', 13)}</button>
           <button class="btn sm ghost" data-user-servers="${u.id}" title="Серверы">${icon('server', 13)}</button>
         </div></td>
       </tr>`;
-    }).join('') || `<tr><td colspan="6">${emptyState('users', 'Нет пользователей', 'Создайте первый аккаунт.')}</td></tr>`;
+    }).join('') || `<tr><td colspan="5">${emptyState('users', 'Нет пользователей', 'Создайте первый аккаунт.')}</td></tr>`;
 
     host.querySelectorAll('[data-edit-user]').forEach((btn) => {
       btn.addEventListener('click', () => editUser(users.find((u) => u.id === btn.dataset.editUser)));
@@ -148,19 +120,15 @@ export async function usersView(ctx) {
           <div class="field"><label>Пароль</label><input class="input" name="password" type="text" value="${Math.random().toString(36).slice(2, 10)}" /></div>
           <div class="field"><label>Роль</label><select class="select" name="role"><option value="user">Пользователь</option><option value="admin">Администратор</option></select></div>
         </div>
-        <hr />
-        <div class="label">Лимиты</div>
-        ${limitsFormHtml(defaults)}
+        <div class="notice">${icon('info', 16)}<div>Лимиты задаются на каждом сервере (вкладка «Настройки» сервера). У пользователя — только аккаунт, роль и список подключённых серверов.</div></div>
       </form>`,
       footer: `<button class="btn" data-close>Отмена</button><button class="btn primary" id="user-ok">${icon('plus', 14)} Создать</button>`,
       onMount: (overlay, close) => {
         overlay.querySelector('#user-ok').addEventListener('click', async () => {
           const form = overlay.querySelector('#user-form');
           const v = serializeForm(form);
-          const limits = {};
-          for (const [key] of LIMIT_FIELDS) limits[key] = v[`lim_${key}`];
           try {
-            await api.post('/api/users', { username: v.username, email: v.email, password: v.password, role: v.role, limits });
+            await api.post('/api/users', { username: v.username, email: v.email, password: v.password, role: v.role });
             toast('Пользователь создан', v.username, 'ok');
             close();
             ctx.refresh();
@@ -185,8 +153,7 @@ export async function usersView(ctx) {
               <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Администратор</option>
             </select></div>
           </div>
-          <div class="label">Лимиты</div>
-          ${limitsFormHtml(user.limits)}
+          <div class="notice">${icon('info', 16)}<div>Лимиты задаются на каждом сервере (вкладка «Настройки» сервера).</div></div>
           <div class="row">
             <button class="btn primary" type="submit">${icon('save', 14)} Сохранить</button>
             <button class="btn" type="button" id="reset-pass">${icon('key', 14)} Сбросить пароль</button>
@@ -205,10 +172,8 @@ export async function usersView(ctx) {
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
           const v = serializeForm(form);
-          const limits = {};
-          for (const [key] of LIMIT_FIELDS) limits[key] = v[`lim_${key}`];
           try {
-            await api.patch(`/api/users/${user.id}`, { email: v.email, role: v.role, limits });
+            await api.patch(`/api/users/${user.id}`, { email: v.email, role: v.role });
             toast('Сохранено', '', 'ok');
             close();
             ctx.refresh();
@@ -543,14 +508,14 @@ export async function eggsView(ctx) {
   <div class="page">
     <div class="page-head">
       <div><div class="eyebrow">шаблоны</div><h1>Шаблоны серверов</h1>
-        <p class="sub">Egg = стартовая команда с переменными, правила остановки и образ. Как в Pterodactyl, но без YAML-магии.</p></div>
+        <p class="sub">Egg = стартовая команда с переменными, правила остановки и образ — без YAML-магии.</p></div>
       <div class="page-actions"><button class="btn primary" id="add-egg">${icon('plus', 15)} Новый шаблон</button></div>
     </div>
     <div class="grid cards">
       ${eggs.map((e) => `
         <article class="card hoverable" style="padding:16px;display:flex;flex-direction:column;gap:12px">
           <div class="row">
-            <span class="server-icon" style="color:${esc(e.color || '#7c8cff')};background:${esc(e.color || '#7c8cff')}1a;border-color:${esc(e.color || '#7c8cff')}33">${icon('package', 18)}</span>
+            <span class="server-icon">${icon('package', 18)}</span>
             <div class="grow" style="min-width:0">
               <div class="bold ellipsis">${esc(e.name)}</div>
               <div class="tiny dim mono">${esc(e.key || e.category)}</div>
@@ -726,9 +691,11 @@ export async function updatesView(ctx) {
   <div class="page">
     <div class="page-head">
       <div><div class="eyebrow">обслуживание</div><h1>Обновления</h1>
-        <p class="sub">Автообновление как в OmniPanel, но без GitHub: локальные пакеты и свой канал по URL.</p></div>
-      <div class="page-actions"><button class="btn primary" id="check-update">${icon('cloudDownload', 15)} Проверить обновления</button></div>
+        <p class="sub">Автообновление без GitHub: локальные пакеты и свой канал по URL.</p></div>
+      <div class="page-actions"><button class="btn" id="build-update">${icon('package', 15)} Собрать пакет</button><button class="btn primary" id="check-update">${icon('cloudDownload', 15)} Проверить обновления</button></div>
     </div>
+
+    ${info.restartRequired ? `<div class="banner" style="margin-bottom:16px">${icon('alert', 17)}<div class="grow"><b>Нужен перезапуск панели</b> — обновление затронуло ядро (core/ или server.js). Интерфейс уже обновлён, но код ядра применится после перезапуска процесса.</div><button class="btn sm primary" id="restart-panel">${icon('restart', 13)} Перезапустить панель</button></div>` : ''}
 
     <div class="grid split">
       <div class="card">
@@ -743,7 +710,7 @@ export async function updatesView(ctx) {
             <dt>Канал</dt><dd class="mono tiny">${esc(info.updateUrl || 'updates/update.json (локально)')}</dd>
             <dt>Автоперезагрузка</dt><dd>${info.autoReload ? 'включена — интерфейс перезагружается сам' : 'выключена'}</dd>
             <dt>Проверка</dt><dd>${info.lastCheck ? fmtDateTime(info.lastCheck) : 'ещё не выполнялась'}</dd>
-            <dt>Перезапуск</dt><dd>${info.restartRequired ? '<span style="color:#fcd34d">нужен для изменений ядра</span>' : 'не требуется'}</dd>
+            <dt>Перезапуск</dt><dd>${info.restartRequired ? '<b>нужен для изменений ядра</b>' : 'не требуется'}</dd>
           </dl>
           ${info.notes ? `<div class="notice" style="margin-top:14px">${icon('info', 16)}<div>${esc(info.notes)}</div></div>` : ''}
         </div>
@@ -762,6 +729,7 @@ export async function updatesView(ctx) {
               </dl>
               ${checkResult.error ? `<div class="banner danger">${icon('alert', 16)}<div>${esc(checkResult.error)}</div></div>` : ''}
               ${checkResult.notes ? `<div class="tiny dim" style="line-height:1.6">${esc(checkResult.notes)}</div>` : ''}
+              ${checkResult.available && checkResult.package ? `<div class="row" style="margin-top:4px"><button class="btn primary" id="apply-update">${icon('download', 14)} Применить обновление v${esc(checkResult.latest)}</button><span class="tiny dim mono">${esc(checkResult.package)}</span></div>` : ''}
             </div>` : `<div class="tiny dim">Нажмите «Проверить обновления». Панель прочитает <span class="mono">updates/update.json</span> или ваш URL.</div>`}
         </div>
       </div>
@@ -776,6 +744,8 @@ export async function updatesView(ctx) {
               <span class="backup-icon">${icon('archive', 15)}</span>
               <div class="grow" style="min-width:0"><div class="mono small ellipsis">${esc(p.file)}</div><div class="tiny dim">${fmtBytes(p.size)} · ${fmtDateTime(p.mtime)}</div></div>
               <button class="btn sm" data-apply="${esc(p.file)}">${icon('download', 13)} Применить</button>
+              <a class="btn sm ghost" href="/api/update/packages/${encodeURIComponent(p.file)}" title="Скачать пакет">${icon('download', 13)}</a>
+              <button class="btn sm ghost danger" data-del-pkg="${esc(p.file)}" title="Удалить пакет">${icon('trash', 13)}</button>
             </div>`).join('') : `<div class="empty" style="padding:20px">${icon('package', 28)}<h3>Пакетов нет</h3><p>Положите zip-архив в папку <span class="mono">updates/</span> — он появится здесь.</p></div>`}
         </div>
       </div>
@@ -797,7 +767,7 @@ export async function updatesView(ctx) {
       <div class="card-head"><div class="panel-title">${icon('clock', 15)} История обновлений</div></div>
       ${history.length ? history.map((h) => `
         <div class="backup-row">
-          <span class="backup-icon" style="color:#86efac;background:rgba(74,222,128,.1);border-color:rgba(74,222,128,.2)">${icon('check', 15)}</span>
+          <span class="backup-icon">${icon('check', 15)}</span>
           <div class="grow"><div class="bold">v${esc(h.version)}</div><div class="tiny dim">${fmtDateTime(h.at)} · ${esc(h.label || '')} · ${h.applied} файлов${h.skipped ? ` · ${h.skipped} пропущено` : ''}</div></div>
           <span class="chip">${esc(h.by || 'system')}</span>
         </div>`).join('') : `<div class="empty">${icon('clock', 28)}<h3>Обновлений ещё не было</h3><p>История появится после первого применения пакета.</p></div>`}
@@ -819,6 +789,85 @@ export async function updatesView(ctx) {
           toast('Ошибка проверки', err.message, 'err');
         }
         btn.disabled = false;
+      });
+
+      const applyBtn = root.querySelector('#apply-update');
+      if (applyBtn) {
+        applyBtn.addEventListener('click', async () => {
+          const ok = await confirmDialog({
+            title: 'Применить обновление?',
+            text: `Будет применена версия ${checkResult.latest}. Сначала панель сделает ZIP-бэкап кода. Данные (data/) не трогаются.`,
+            confirmText: 'Применить',
+          });
+          if (!ok) return;
+          applyBtn.disabled = true;
+          try {
+            const res = await api.post('/api/update/apply');
+            toast('Обновление применено', res.message, 'ok', 7000);
+            setTimeout(() => window.location.reload(), 1200);
+          } catch (err) { toast('Ошибка', err.message, 'err'); }
+          applyBtn.disabled = false;
+        });
+      }
+
+      const buildBtn = root.querySelector('#build-update');
+      if (buildBtn) {
+        buildBtn.addEventListener('click', () => {
+          modal({
+            title: 'Собрать пакет обновления',
+            subtitle: 'ZIP с текущим кодом панели + манифест в updates/. Потом его можно применить кнопкой «Применить».',
+            body: `<form class="stack" id="build-form">
+              <div class="field"><label>Новая версия (необязательно)</label><input class="input mono" name="bump" placeholder="например 1.0.1 — пусто = текущая" /></div>
+              <div class="field"><label>Канал</label><select class="select" name="channel"><option value="">текущий</option><option>stable</option><option>beta</option><option>dev</option></select></div>
+              <div class="field"><label>Описание изменений</label><textarea class="textarea" name="notes" rows="3" placeholder="что нового в этой версии"></textarea></div>
+            </form>`,
+            footer: `<button class="btn" data-close>Отмена</button><button class="btn primary" id="build-ok">${icon('package', 14)} Собрать</button>`,
+            onMount: (overlay, close) => {
+              overlay.querySelector('#build-ok').addEventListener('click', async () => {
+                const v = serializeForm(overlay.querySelector('#build-form'));
+                try {
+                  const res = await api.post('/api/update/build', { bump: v.bump || '', notes: v.notes || '', channel: v.channel || '' });
+                  toast('Пакет собран', `${res.file} · ${fmtBytes(res.size)} · ${res.files} файлов`, 'ok', 7000);
+                  close();
+                  ctx.refresh();
+                } catch (err) { toast('Ошибка сборки', err.message, 'err'); }
+              });
+            },
+          });
+        });
+      }
+
+      const restartBtn = root.querySelector('#restart-panel');
+      if (restartBtn) {
+        restartBtn.addEventListener('click', async () => {
+          const ok = await confirmDialog({
+            title: 'Перезапустить панель?',
+            text: 'Процесс панели завершится и стартует заново. Если панель запущена без супервизора (systemd/pm2), её нужно будет запустить вручную: node server.js. Открытые вкладки переподключатся сами.',
+            confirmText: 'Перезапустить',
+          });
+          if (!ok) return;
+          try {
+            await api.post('/api/update/restart');
+            toast('Перезапуск…', 'Панель перезапускается, обновите страницу через несколько секунд', 'info', 7000);
+          } catch (err) { toast('Ошибка', err.message, 'err'); }
+        });
+      }
+
+      root.querySelectorAll('[data-del-pkg]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const ok = await confirmDialog({
+            title: 'Удалить пакет?',
+            text: `Файл updates/${btn.dataset.delPkg} будет удалён с диска.`,
+            confirmText: 'Удалить',
+            danger: true,
+          });
+          if (!ok) return;
+          try {
+            await api.del(`/api/update/packages/${encodeURIComponent(btn.dataset.delPkg)}`);
+            toast('Пакет удалён', btn.dataset.delPkg, 'ok');
+            ctx.refresh();
+          } catch (err) { toast('Ошибка', err.message, 'err'); }
+        });
       });
 
       root.querySelectorAll('[data-apply]').forEach((btn) => {
@@ -867,7 +916,7 @@ export async function updatesView(ctx) {
 export async function settingsView(ctx) {
   const data = await api.get('/api/settings');
   const s = data.settings;
-  const accents = ['#7c8cff', '#4ade80', '#38bdf8', '#fbbf24', '#fb7185', '#c084fc', '#e9ecf4'];
+  const accents = ['#ffffff', '#d4d4d4', '#a3a3a3', '#737373', '#262626', '#000000', '#e5e5e5'];
 
   const html = `
   <div class="page">
@@ -994,14 +1043,14 @@ export async function settingsView(ctx) {
 export async function profileView(ctx) {
   const me = await api.get('/api/auth/me');
   const keys = await api.get('/api/auth/keys');
+  const serversData = await api.get('/api/servers');
+  const myServers = serversData.servers || [];
   const user = me.user;
-  const limits = user.limits || {};
-  const usage = user.usage || {};
 
   const html = `
   <div class="page">
     <div class="page-head">
-      <div><div class="eyebrow">аккаунт</div><h1>Профиль</h1><p class="sub">Данные аккаунта, пароль, API-ключи и лимиты.</p></div>
+      <div><div class="eyebrow">аккаунт</div><h1>Профиль</h1><p class="sub">Данные аккаунта, пароль, API-ключи и подключённые серверы.</p></div>
       <div class="page-actions"><span class="tag ${user.role}">${user.role === 'admin' ? 'администратор' : 'пользователь'}</span></div>
     </div>
     <div class="grid split">
@@ -1054,16 +1103,18 @@ export async function profileView(ctx) {
         </div>
 
         <div class="card">
-          <div class="card-head"><div class="panel-title">${icon('sliders', 15)} Лимиты</div></div>
+          <div class="card-head"><div class="panel-title">${icon('servers', 15)} Мои серверы</div><span class="chip">${myServers.length}</span></div>
           <div class="card-body stack">
-            <div><div class="usage-line"><span>Серверы</span><b>${usage.servers || 0} / ${limits.servers}</b></div>${meter(((usage.servers || 0) / Math.max(1, limits.servers)) * 100)}</div>
-            <div><div class="usage-line"><span>Память</span><b>${fmtMb(usage.memory || 0)} / ${fmtMb(limits.memory)}</b></div>${meter(((usage.memory || 0) / Math.max(1, limits.memory)) * 100)}</div>
-            <div><div class="usage-line"><span>Диск</span><b>${fmtMb(usage.disk || 0)} / ${fmtMb(limits.disk)}</b></div>${meter(((usage.disk || 0) / Math.max(1, limits.disk)) * 100)}</div>
-            <div class="row tiny dim" style="gap:10px;flex-wrap:wrap">
-              <span class="chip">CPU ${limits.cpu}%</span>
-              <span class="chip">Бэкапы ${limits.backups}</span>
-              <span class="chip">Порты ${limits.ports}</span>
-            </div>
+            ${myServers.length ? myServers.map((s) => `
+              <div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">
+                <div class="grow" style="min-width:0">
+                  <div class="small"><b>${esc(s.name)}</b> ${s.isOwner ? '<span class="tag user">владелец</span>' : '<span class="tag user">доступ</span>'}</div>
+                  <div class="tiny dim mono">${esc(s.limits.memory)} МБ · ${esc(Math.round(s.limits.disk / 1024))} ГБ · CPU ${esc(s.limits.cpu)}%${s.allocation ? ` · ${esc(s.allocation.label)}` : ''}</div>
+                </div>
+                ${statusPill(s.status)}
+                <a class="btn sm ghost" href="#/servers/${s.id}/console">открыть ${icon('chevronRight', 12)}</a>
+              </div>`).join('') : `<div class="tiny dim">Серверов нет. Попросите администратора выдать сервер.</div>`}
+            <div class="tiny dim">Лимиты задаются на каждом сервере — вкладка «Настройки» сервера.</div>
           </div>
         </div>
 

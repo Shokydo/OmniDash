@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Файловый менеджер сервера: всё строго внутри каталога сервера (jail),
- * как `files.*` в Pterodactyl. Плюс архивы (zip) для удобства.
+ * Плюс архивы (zip) для удобства.
  */
 const fs = require('fs');
 const path = require('path');

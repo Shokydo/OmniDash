@@ -10,11 +10,10 @@ export function serverCard(server) {
   const usage = server.usage || {};
   const memPct = server.limits.memory ? (usage.memory / 1024 / 1024 / server.limits.memory) * 100 : 0;
   const diskPct = server.limits.disk ? (usage.disk / 1024 / 1024 / server.limits.disk) * 100 : 0;
-  const color = (server.egg && server.egg.color) || '#7c8cff';
   return `
   <article class="card hoverable server-card" data-server-id="${server.id}">
     <div class="head">
-      <a class="server-icon" href="#/servers/${server.id}/console" style="color:${color};background:${color}1a;border-color:${color}33">${icon('server', 19)}</a>
+      <a class="server-icon" href="#/servers/${server.id}/console">${icon('server', 19)}</a>
       <div class="grow" style="min-width:0">
         <a class="title ellipsis" style="display:block;color:var(--text)" href="#/servers/${server.id}/console">${esc(server.name)}</a>
         <div class="sub">
@@ -52,7 +51,7 @@ export function serverRow(server) {
   <tr class="clickable" data-href="#/servers/${server.id}/console" data-server-id="${server.id}">
     <td>
       <div class="row" style="gap:9px;min-width:0">
-        <span class="avatar sm" style="background:linear-gradient(145deg,${(server.egg && server.egg.color) || '#7c8cff'},${(server.egg && server.egg.color) || '#7c8cff'}88)">${esc((server.name || '?').slice(0, 2))}</span>
+        <span class="avatar sm">${esc((server.name || '?').slice(0, 2))}</span>
         <div style="min-width:0">
           <div class="ellipsis" style="font-weight:560">${esc(server.name)}</div>
           <div class="tiny dim mono ellipsis">${esc(server.uuid.slice(0, 13))}</div>

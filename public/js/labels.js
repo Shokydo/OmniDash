@@ -51,5 +51,5 @@ export const ACTIONS = {
 export const actionMeta = (action) => ACTIONS[action] || { label: action, icon: 'activity', tone: 'info' };
 
 export const TONE_COLORS = {
-  ok: '#86efac', info: '#93b4ff', warn: '#fcd34d', danger: '#fda4af',
+  ok: '#ffffff', info: '#d4d4d4', warn: '#a3a3a3', danger: '#737373',
 };

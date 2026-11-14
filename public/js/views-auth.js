@@ -5,7 +5,6 @@ import { esc, toast } from './ui.js';
 
 export function loginView(ctx) {
   const meta = ctx.meta || {};
-  const demo = (meta.demo && meta.demo.logins) || [];
   const html = `
   <div class="auth">
     <section class="auth-art">
@@ -17,7 +16,7 @@ export function loginView(ctx) {
         </div>
       </div>
       <div>
-        <h1 class="auth-title">Панель, которая<br/>заменяет <span>Pterodactyl</span></h1>
+        <h1 class="auth-title">Панель управления<br/><span>серверами</span></h1>
         <p class="auth-sub">Серверы, порты, лимиты, доступы и сроки аренды — в одном тёмном интерфейсе.
         Реальные процессы, живая консоль, файлы и бэкапы. Без GitHub и лишних зависимостей.</p>
         <div class="auth-feats">
@@ -71,16 +70,7 @@ export function loginView(ctx) {
 
         ${meta.registrationOpen ? `<div class="auth-alt">Нет аккаунта? <a href="#" id="switch-mode">Зарегистрироваться</a></div>` : `<div class="auth-alt">Регистрация закрыта — аккаунт выдаёт администратор.</div>`}
 
-        ${demo.length ? `
-        <div class="demo-box">
-          <div class="t">${icon('sparkles', 12)} демо-доступ</div>
-          ${demo.map((d) => `
-            <div class="demo-row">
-              <code>${esc(d.username)}</code><span class="dim">/</span><code>${esc(d.password)}</code>
-              <span class="pill ${d.role === 'admin' ? 'accent' : ''}" style="height:19px;font-size:10px">${d.role}</span>
-              <button class="btn sm ghost" data-fill="${esc(d.username)}" data-pass="${esc(d.password)}">заполнить</button>
-            </div>`).join('')}
-        </div>` : ''}
+
       </div>
     </section>
   </div>`;
@@ -98,14 +88,6 @@ export function loginView(ctx) {
       error.classList.add('show');
       setTimeout(() => error.classList.remove('show'), 5000);
     };
-
-    root.querySelectorAll('[data-fill]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        root.querySelector('#login-username').value = btn.dataset.fill;
-        root.querySelector('#login-password').value = btn.dataset.pass;
-        root.querySelector('#login-password').focus();
-      });
-    });
 
     const switchMode = root.querySelector('#switch-mode');
     if (switchMode) {

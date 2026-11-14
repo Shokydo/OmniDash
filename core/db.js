@@ -1,8 +1,8 @@
 'use strict';
 /**
  * Хранилище OmniDash — один JSON-файл с атомарной записью.
- * Специально без внешней СУБД: панель можно перенести одной папкой,
- * как `OmniPanelData` в OmniPanel. Данные лежат в `data/db.json`.
+ * Специально без внешней СУБД: панель можно перенести одной папкой.
+ * Данные лежат в `data/db.json`.
  */
 const fs = require('fs');
 const path = require('path');
@@ -25,7 +25,7 @@ const DEFAULT_SETTINGS = {
   warnBeforeExpiryDays: 5,
   defaultEggId: null,
   theme: 'obsidian',
-  accent: '#7c8cff',
+  accent: '#ffffff',
   compact: false,
   devAutoReload: true,
   updateUrl: '',
@@ -98,6 +98,8 @@ function load() {
     data = DEFAULT_DATA();
   }
   if (!Array.isArray(data.users)) data.users = [];
+  // миграция на чёрно-белую тему: старый цветной акцент -> белый
+  if (data.settings && data.settings.accent === '#7c8cff') data.settings.accent = '#ffffff';
   data.meta.bootCount = Number(data.meta.bootCount || 0) + 1;
   data.meta.lastBootAt = Date.now();
   save();
@@ -164,7 +166,7 @@ function newUser({ username, email, role = 'user', passwordHash, hash, salt, lim
     lastLoginAt: null,
     limits: { ...data.settings.defaultLimits, ...(limits || {}) },
     apiKeys: [],
-    avatarColor: ['#6f7cff', '#34d399', '#f472b6', '#fbbf24', '#22d3ee', '#a78bfa'][Math.floor(Math.random() * 6)],
+    avatarColor: ['#262626', '#404040', '#595959', '#737373', '#8c8c8c', '#a6a6a6'][Math.floor(Math.random() * 6)],
     forcePasswordChange: false,
   };
   data.users.push(user);

@@ -82,7 +82,7 @@ export function areaChart(canvas, opts) {
         x: padL + (w * i) / Math.max(1, values.length - 1),
         y: padT + h - (Math.min(value, max) / max) * h,
       }));
-      const color = s.color || '#7c8cff';
+      const color = s.color || '#ffffff';
       // заливка
       const gradient = ctx.createLinearGradient(0, padT, 0, padT + h);
       gradient.addColorStop(0, s.fill || `${color}33`);
@@ -129,7 +129,7 @@ export function areaChart(canvas, opts) {
         const y = padT + h - (Math.min(val, max) / max) * h;
         ctx.beginPath();
         ctx.arc(x, y, 3.2, 0, Math.PI * 2);
-        ctx.fillStyle = s.color || '#7c8cff';
+        ctx.fillStyle = s.color || '#ffffff';
         ctx.fill();
         ctx.strokeStyle = 'rgba(0,0,0,.6)';
         ctx.lineWidth = 1;
@@ -161,7 +161,7 @@ export function areaChart(canvas, opts) {
     const clamped = Math.max(0, Math.min(state.count - 1, idx));
     const rows = state.series.map((s) => {
       const val = s.values[Math.min(clamped, s.values.length - 1)] || 0;
-      return `<div style="display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:${s.color || '#7c8cff'}"></span>${s.label || ''} <b style="margin-left:auto;color:#e9ecf4">${(opts.format || ((n) => String(Math.round(n))))(val)}</b></div>`;
+      return `<div style="display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:1px;background:${s.color || '#ffffff'}"></span>${s.label || ''} <b style="margin-left:auto;color:#f5f5f5">${(opts.format || ((n) => String(Math.round(n))))(val)}</b></div>`;
     }).join('');
     const timeLabel = (opts.tooltipLabel && opts.tooltipLabel(clamped)) || '';
     tooltip.innerHTML = `${timeLabel ? `<div style="color:#646d81;margin-bottom:4px">${timeLabel}</div>` : ''}${rows}`;
@@ -186,7 +186,7 @@ export function areaChart(canvas, opts) {
   canvas._redraw = () => draw();
 }
 
-export function sparkline(canvas, values, color = '#7c8cff', height = 36) {
+export function sparkline(canvas, values, color = '#ffffff', height = 36) {
   if (!canvas) return;
   const width = canvas.clientWidth || 180;
   const dpr = DPR();
@@ -219,7 +219,7 @@ export function sparkline(canvas, values, color = '#7c8cff', height = 36) {
   ctx.stroke();
 }
 
-export function ring(element, percent, { color = '#7c8cff', size = 74, stroke = 6, label = '' } = {}) {
+export function ring(element, percent, { color = '#ffffff', size = 74, stroke = 6, label = '' } = {}) {
   if (!element) return;
   const value = Math.max(0, Math.min(100, Number(percent) || 0));
   const r = (size - stroke) / 2;

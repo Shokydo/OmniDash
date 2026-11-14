@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Шаблоны серверов («яйца» / eggs).
- * Формат совместим по смыслу с Pterodactyl: стартовая команда с {{ПЕРЕМЕННЫМИ}},
+ * Формат шаблонов: стартовая команда с {{ПЕРЕМЕННЫМИ}},
  * переменные окружения, правила остановки, регулярки для статуса и игроков.
  */
 const { id, uuid } = require('./util');
@@ -32,7 +32,7 @@ function templates() {
       name: 'Paper 1.21.4',
       description: 'Minecraft-сервер. В демо-режиме запускается эмулятор консоли и порта — весь функционал панели (консоль, порты, лимиты, бэкапы) работает по-настоящему.',
       category: 'minecraft',
-      color: '#4ade80',
+      color: '#ffffff',
       startup: 'node "{{BASE}}/demo/minecraft-mock.js" --port {{PORT}} --memory {{MEMORY}} --name "{{SERVER_NAME}}" --seed {{SEED}}',
       image: 'ghcr.io/pterodactyl/yolks:java_21',
       config: {
@@ -52,7 +52,7 @@ function templates() {
       name: 'Node.js 22',
       description: 'Универсальный Node.js: боты Discord/Telegram, API, воркеры. Стартовая команда меняется, зависимости ставятся в файловом менеджере.',
       category: 'node',
-      color: '#a3e635',
+      color: '#d4d4d4',
       startup: 'node "{{BASE}}/demo/bot-mock.js" --name "{{SERVER_NAME}}" --token "{{BOT_TOKEN}}"',
       image: 'ghcr.io/pterodactyl/yolks:nodejs_22',
       config: { stopCommand: 'stop', stopTimeout: 10, readyRegex: 'Bot ready|Bot online' },
@@ -65,7 +65,7 @@ function templates() {
       name: 'Python 3.12',
       description: 'Python-приложение: парсеры, боты, воркеры. Запускается в изолированном каталоге сервера.',
       category: 'python',
-      color: '#60a5fa',
+      color: '#a3a3a3',
       startup: 'python3 -u "{{BASE}}/demo/python-bot.py" --name "{{SERVER_NAME}}"',
       image: 'ghcr.io/pterodactyl/yolks:python_3.12',
       config: { stopCommand: 'stop', stopTimeout: 10, readyRegex: 'Bot online' },
@@ -76,7 +76,7 @@ function templates() {
       name: 'Универсальный (своя команда)',
       description: 'Для любого бинарника или скрипта: укажи стартовую команду. Работает всё, кроме специфичных для игры регулярок.',
       category: 'generic',
-      color: '#c084fc',
+      color: '#737373',
       startup: 'node "{{BASE}}/demo/bot-mock.js" --name "{{SERVER_NAME}}"',
       image: 'ghcr.io/pterodactyl/yolks:debian',
       config: { stopCommand: 'stop', stopTimeout: 10, readyRegex: 'Bot ready|Bot online|listening' },

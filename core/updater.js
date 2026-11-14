@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Обновления OmniDash — как в OmniPanel, но без GitHub.
+ * Обновления OmniDash — без GitHub: локальные пакеты и свой канал по URL.
  *
  * 1. Автоперезагрузка интерфейса (dev): файлы public/, core/ и server.js
  *    отслеживаются, панель сама перезагружает вкладку у всех клиентов.
@@ -308,7 +308,21 @@ class Updater {
       if (!result.available || !result.package) {
         throw Object.assign(new Error('Обновление недоступно: нет нового пакета'), { status: 409 });
       }
-      if (!/^https?:\/\//i.test(result.package)) throw Object.assign(new Error('В манифесте нет ссылки на пакет'), { status: 400 });
+      // локальный пакет из updates/ (манифест updates/update.json)
+      if (!/^https?:\/\//i.test(result.package)) {
+        const clean = String(result.package).replace(/\\/g, '/').split('/').pop();
+        if (clean && clean.endsWith('.zip')) {
+          const abs = path.join(UPDATES_DIR, clean);
+          if (fs.existsSync(abs)) {
+            const buf = fs.readFileSync(abs);
+            if (result.sha256 && sha256(buf) !== result.sha256) {
+              throw Object.assign(new Error('sha256 пакета не совпал — обновление отменено'), { status: 409 });
+            }
+            return this.applyPackage(buf, user, { label: `updates/${clean}` });
+          }
+        }
+        throw Object.assign(new Error('В манифесте нет ссылки на пакет и файл не найден в updates/'), { status: 400 });
+      }
       const buf = await new Promise((resolve, reject) => {
         const lib = result.package.startsWith('https:') ? https : http;
         lib.get(result.package, { timeout: 30000 }, (res) => {
@@ -327,6 +341,82 @@ class Updater {
       }
       return this.applyPackage(buf, user, { label: result.package });
     });
+  }
+
+  /* ───────────────────────── сборка пакета ───────────────────────── */
+
+  packagePath(relFile) {
+    ensureDirs();
+    const clean = String(relFile || '').replace(/\\/g, '/').split('/').pop();
+    if (!clean || !clean.endsWith('.zip') || clean.includes('..')) return null;
+    const abs = path.join(UPDATES_DIR, clean);
+    if (!abs.startsWith(UPDATES_DIR + path.sep)) return null;
+    return abs;
+  }
+
+  deletePackage(relFile) {
+    const abs = this.packagePath(relFile);
+    if (!abs || !fs.existsSync(abs)) throw Object.assign(new Error('Пакет не найден'), { status: 404 });
+    fs.unlinkSync(abs);
+    return { deleted: path.basename(abs), packages: this.listPackages() };
+  }
+
+  buildPackage({ bump = '', notes = '', channel = '' } = {}, user = null) {
+    const pkgFile = path.join(ROOT, 'package.json');
+    const versionFile = path.join(ROOT, 'version.json');
+    const pkg = readJson(pkgFile, {});
+    const release = readJson(versionFile, { version: pkg.version || '1.0.0', notes: '' });
+    if (bump) {
+      if (!/^\d+\.\d+\.\d+$/.test(String(bump))) {
+        throw Object.assign(new Error('Версия должна быть в формате X.Y.Z, например 1.0.1'), { status: 400 });
+      }
+      pkg.version = String(bump);
+      release.version = String(bump);
+      release.at = new Date().toISOString();
+      if (notes) release.notes = String(notes).slice(0, 2000);
+      fs.writeFileSync(pkgFile, JSON.stringify(pkg, null, 2) + '\n');
+      fs.writeFileSync(versionFile, JSON.stringify(release, null, 2) + '\n');
+    }
+    const version = release.version || pkg.version || '1.0.0';
+    const finalNotes = notes ? String(notes).slice(0, 2000) : (release.notes || '');
+    const finalChannel = channel ? String(channel).slice(0, 40) : (release.channel || 'stable');
+    const at = new Date().toISOString();
+    const includeFiles = ['server.js', 'package.json', 'version.json', 'README.md'];
+    const includeDirs = ['core', 'public', 'demo', 'tools', 'docs'];
+    const ignore = [/^data\//, /^updates\//, /^node_modules\//, /^tests\//, /^\.git/, /(^|\/)\.DS_Store$/, /\.log$/, /\.zip$/, /(^|\/)tmp\//];
+    ensureDirs();
+    const entries = [];
+    for (const name of includeFiles) {
+      const abs = path.join(ROOT, name);
+      if (!fs.existsSync(abs)) continue;
+      const st = fs.statSync(abs);
+      entries.push({ name, data: fs.readFileSync(abs), mtime: st.mtimeMs });
+    }
+    for (const dir of includeDirs) {
+      const abs = path.join(ROOT, dir);
+      if (!fs.existsSync(abs)) continue;
+      for (const entry of zip.walk(abs, ROOT, [], (full, rel) => !ignore.some((re) => re.test(rel)))) {
+        if (entry.dir) continue;
+        entries.push(entry);
+      }
+    }
+    if (!entries.some((e) => e.name === 'server.js')) {
+      throw Object.assign(new Error('Не найден server.js — сборка невозможна'), { status: 500 });
+    }
+    const buf = zip.write(entries);
+    const fileName = `omnidash-${version}.zip`;
+    fs.writeFileSync(path.join(UPDATES_DIR, fileName), buf);
+    const manifest = {
+      version, channel: finalChannel, at, notes: finalNotes,
+      package: `updates/${fileName}`, size: buf.length, sha256: sha256(buf),
+    };
+    fs.writeFileSync(path.join(UPDATES_DIR, 'update.json'), JSON.stringify(manifest, null, 2) + '\n');
+    db.audit({
+      action: 'update.apply', actorId: user ? user.id : null,
+      actorName: user ? user.username : 'system', target: `v${version}`,
+      meta: { built: true, file: fileName, size: buf.length },
+    });
+    return { version, file: fileName, size: buf.length, sha256: manifest.sha256, files: entries.length, packages: this.listPackages() };
   }
 
   /* ───────────────────────── автоперезагрузка ───────────────────────── */

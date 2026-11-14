@@ -119,7 +119,7 @@ export async function dashboardView(ctx) {
       <div class="card stat">
         <div class="stat-top">
           <span class="stat-label">${isAdmin ? 'Пользователи' : 'Мои серверы'}</span>
-          <span class="stat-icon" style="background:rgba(74,222,128,.1);color:#86efac;border-color:rgba(74,222,128,.2)">${icon(isAdmin ? 'users' : 'server', 14)}</span>
+          <span class="stat-icon" style="background:rgba(255,255,255,.06);color:#fff;border-color:rgba(255,255,255,.18)">${icon(isAdmin ? 'users' : 'server', 14)}</span>
         </div>
         <div class="stat-value">${isAdmin ? fmtNum(data.counts.users) : `${usedServers}<small>/ ${maxServers ?? '∞'}</small>`}</div>
         <div class="stat-foot">
@@ -130,7 +130,7 @@ export async function dashboardView(ctx) {
       <div class="card stat">
         <div class="stat-top">
           <span class="stat-label">CPU</span>
-          <span class="stat-icon" style="background:rgba(251,191,36,.1);color:#fcd34d;border-color:rgba(251,191,36,.2)">${icon('cpu', 14)}</span>
+          <span class="stat-icon" style="background:rgba(255,255,255,.06);color:#d4d4d4;border-color:rgba(255,255,255,.18)">${icon('cpu', 14)}</span>
         </div>
         <div class="stat-value">${data.usage.cpu.toFixed(1)}<small>%</small></div>
         <div class="stat-foot">
@@ -142,7 +142,7 @@ export async function dashboardView(ctx) {
       <div class="card stat">
         <div class="stat-top">
           <span class="stat-label">Память</span>
-          <span class="stat-icon" style="background:rgba(56,189,248,.1);color:#7dd3fc;border-color:rgba(56,189,248,.2)">${icon('ram', 14)}</span>
+          <span class="stat-icon" style="background:rgba(255,255,255,.06);color:#a3a3a3;border-color:rgba(255,255,255,.18)">${icon('ram', 14)}</span>
         </div>
         <div class="stat-value">${fmtMb(Math.round(data.usage.memory / 1024 / 1024))}<small>из ${fmtMb(data.usage.memoryLimit)}</small></div>
         <div class="stat-foot">
@@ -158,8 +158,8 @@ export async function dashboardView(ctx) {
         <div class="card-head">
           <div class="panel-title">${icon('pulse', 15)} Нагрузка в реальном времени</div>
           <div class="row">
-            <span class="chip" style="gap:5px"><i style="width:6px;height:6px;border-radius:50%;background:#7c8cff;display:inline-block"></i>CPU</span>
-            <span class="chip" style="gap:5px"><i style="width:6px;height:6px;border-radius:50%;background:#4ade80;display:inline-block"></i>RAM</span>
+            <span class="chip" style="gap:5px"><i style="width:6px;height:6px;border-radius:1px;background:#ffffff;display:inline-block"></i>CPU</span>
+            <span class="chip" style="gap:5px"><i style="width:6px;height:6px;border-radius:1px;background:#a3a3a3;display:inline-block"></i>RAM</span>
             <span class="pill running" style="height:22px"><i></i>live</span>
           </div>
         </div>
@@ -197,7 +197,7 @@ export async function dashboardView(ctx) {
       <div class="card-body stack sm">
         ${requests.length ? requests.map((r) => `
           <div class="row" style="gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;flex-wrap:wrap">
-            <span class="timeline-dot" style="color:#93b4ff">${icon('bell', 13)}</span>
+            <span class="timeline-dot" style="color:#d4d4d4">${icon('bell', 13)}</span>
             <div class="grow" style="min-width:0">
               <div style="font-weight:560">Запрос продления · ${esc(r.serverName)}</div>
               <div class="tiny dim">${esc(r.username)} просит +${r.days} дн · ${timeAgo(r.at)}${r.comment ? ` · «${esc(r.comment)}»` : ''}</div>
@@ -207,7 +207,7 @@ export async function dashboardView(ctx) {
           </div>`).join('') : ''}
         ${(data.expiring || []).map((s) => `
           <div class="row" style="gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;flex-wrap:wrap">
-            <span class="timeline-dot" style="color:#fcd34d">${icon('calendar', 13)}</span>
+            <span class="timeline-dot" style="color:#a3a3a3">${icon('calendar', 13)}</span>
             <div class="grow" style="min-width:0">
               <div style="font-weight:560">${esc(s.name)}</div>
               <div class="tiny dim">срок истекает через ${s.daysLeft} дн · ${fmtDateTime(s.expiresAt)}</div>
@@ -232,7 +232,7 @@ export async function dashboardView(ctx) {
                 <tr data-goto="#/servers/${s.id}/console">
                   <td>
                     <div class="row" style="gap:9px;min-width:0">
-                      <span class="avatar sm" style="background:linear-gradient(145deg,${(s.egg && s.egg.color) || '#7c8cff'},${(s.egg && s.egg.color) || '#7c8cff'}88)">${esc((s.name || '?').slice(0, 2))}</span>
+                      <span class="avatar sm">${esc((s.name || '?').slice(0, 2))}</span>
                       <div style="min-width:0">
                         <div class="ellipsis" style="font-weight:560">${esc(s.name)}</div>
                         <div class="tiny dim ellipsis">${esc((s.owner && s.owner.username) || '—')} · ${esc((s.egg && s.egg.name) || '—')}</div>
@@ -289,8 +289,8 @@ export async function dashboardView(ctx) {
     while (cpu.length < 2) { cpu.unshift(0); mem.unshift(0); }
     areaChart(chart, {
       series: [
-        { values: cpu, color: '#7c8cff', label: 'CPU' },
-        { values: mem, color: '#4ade80', label: 'RAM' },
+        { values: cpu, color: '#ffffff', label: 'CPU' },
+        { values: mem, color: '#a3a3a3', label: 'RAM' },
       ],
       max: Math.max(100, ...cpu),
       format: (n) => `${Math.round(n)}%`,
@@ -303,8 +303,8 @@ export async function dashboardView(ctx) {
       const el = root.querySelector(`[data-spark="${name}"]`);
       if (el) sparkline(el, values, color, 36);
     };
-    spark('cpu', cpu.length ? cpu : [0, 0], '#7c8cff');
-    spark('mem', mem.length ? mem : [0, 0], '#4ade80');
+    spark('cpu', cpu.length ? cpu : [0, 0], '#ffffff');
+    spark('mem', mem.length ? mem : [0, 0], '#a3a3a3');
 
     // живые метрики: суммируем SSE-статистику по видимым серверам
     const serverIds = new Set((data.recent || []).map((s) => s.id));

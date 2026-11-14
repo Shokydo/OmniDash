@@ -166,12 +166,14 @@ function serverJson(server, user, daemon) {
 
 function userJson(user, { withServers = false } = {}) {
   const usage = serversCore.usageOf(user.id);
+  const owned = serversCore.ownedServers(user.id);
   const out = {
     ...publicUser(user),
     limits: { ...db.data.settings.defaultLimits, ...(user.limits || {}) },
     usage,
     apiKeys: (user.apiKeys || []).map(auth.publicKey),
-    servers: serversCore.ownedServers(user.id).length,
+    servers: owned.length,
+    serverNames: owned.map((s) => s.name),
     sharedWith: db.data.servers.filter((s) => (s.subusers || []).some((x) => x.userId === user.id)).length,
   };
   if (withServers) {
@@ -1576,6 +1578,43 @@ function createApi(deps) {
     if (!updater) throw notFound();
     const file = String((ctx.body || {}).file || '');
     return updater.applyFromDisk(file, ctx.user);
+  });
+
+  route('POST', '/api/update/apply', async (ctx) => {
+    adminOnly(ctx.user);
+    if (!updater) throw notFound();
+    return updater.applyVerifiedUrlPackage(ctx.user);
+  });
+
+  route('POST', '/api/update/build', (ctx) => {
+    adminOnly(ctx.user);
+    if (!updater) throw notFound();
+    const body = ctx.body || {};
+    return updater.buildPackage({ bump: body.bump || '', notes: body.notes || '', channel: body.channel || '' }, ctx.user);
+  });
+
+  route('GET', '/api/update/packages/:file', (ctx) => {
+    adminOnly(ctx.user);
+    if (!updater) throw notFound();
+    const abs = updater.packagePath(ctx.params.file);
+    if (!abs || !fs.existsSync(abs)) throw notFound('Пакет не найден');
+    streamFile(ctx.res, abs, path.basename(abs));
+    return undefined;
+  });
+
+  route('DELETE', '/api/update/packages/:file', (ctx) => {
+    adminOnly(ctx.user);
+    if (!updater) throw notFound();
+    return updater.deletePackage(ctx.params.file);
+  });
+
+  route('POST', '/api/update/restart', (ctx) => {
+    adminOnly(ctx.user);
+    if (!updater) throw notFound();
+    db.audit({ action: 'update.apply', actorId: ctx.user.id, actorName: ctx.user.username, target: 'restart', meta: { restart: true } });
+    db.flush();
+    setTimeout(() => process.exit(0), 600);
+    return { restarting: true, message: 'Панель перезапускается. Если процесс не под супервизором (systemd/pm2), запустите его вручную: node server.js' };
   });
 
   /* ─────────── health ─────────── */

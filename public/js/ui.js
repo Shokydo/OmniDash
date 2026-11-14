@@ -88,8 +88,7 @@ export const statusPill = (status) => {
 
 export const avatar = (user, size = '') => {
   const name = (user && (user.username || user.name)) || '?';
-  const color = (user && user.avatarColor) || '#5a68c9';
-  return `<span class="avatar ${size}" style="background:linear-gradient(145deg, ${color}, ${color}99)">${esc(name.slice(0, 2))}</span>`;
+  return `<span class="avatar ${size}">${esc(name.slice(0, 2))}</span>`;
 };
 
 export const emptyState = (iconName, title, text, action = '') => `
@@ -328,14 +327,13 @@ export const powerButtons = (server, compact = false) => {
 };
 
 export const expiryChip = (days) => {
-  if (days === null || days === undefined) return `<span class="chip">${icon('calendar', 12)} бессрочно</span>`;
+  if (days === null || days === undefined) return `<span class="chip expiry-chip">${icon('calendar', 12)}<span>бессрочно</span></span>`;
   const tone = days < 0 ? 'rose' : days <= 5 ? 'amber' : '';
-  return `<span class="chip ${tone}" title="Срок аренды">${icon('calendar', 12)} ${days < 0 ? `просрочен` : `осталось ${days} дн`}</span>`;
+  return `<span class="chip expiry-chip ${tone}" title="Срок аренды">${icon('calendar', 12)}<span>${days < 0 ? `просрочен` : `осталось ${days} дн`}</span></span>`;
 };
 
 export const serverIcon = (server, cls = '') => {
-  const color = (server.egg && server.egg.color) || '#7c8cff';
-  return `<span class="server-icon ${cls}" style="color:${color};background:${color}1a;border-color:${color}33">${icon('server', 19)}</span>`;
+  return `<span class="server-icon ${cls}">${icon('server', 19)}</span>`;
 };
 
 export const copyBtn = (text, label = '') => `<button class="btn sm ghost" data-copy="${esc(text)}">${icon('copy', 13)}${label ? esc(label) : ''}</button>`;

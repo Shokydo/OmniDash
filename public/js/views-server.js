@@ -59,7 +59,7 @@ export async function serverView(ctx) {
 
     <div class="card pad" style="margin-bottom:16px">
       <div class="server-hero">
-        <a class="server-icon hero-icon" href="#/servers" style="color:${(server.egg && server.egg.color) || '#7c8cff'};background:${(server.egg && server.egg.color) || '#7c8cff'}1a;border-color:${(server.egg && server.egg.color) || '#7c8cff'}33">${icon('server', 24)}</a>
+        <a class="server-icon hero-icon" href="#/servers">${icon('server', 24)}</a>
         <div class="grow" style="min-width:0">
           <div class="row" style="gap:10px;flex-wrap:wrap">
             <h1 style="font-size:23px">${esc(server.name)}</h1>
@@ -356,19 +356,19 @@ function manageTab(ctx, data) {
         <div class="stat-spark"><canvas id="mini-cpu"></canvas></div>
       </div>
       <div class="card stat">
-        <div class="stat-top"><span class="stat-label">Память</span><span class="stat-icon" style="background:rgba(56,189,248,.1);color:#7dd3fc;border-color:rgba(56,189,248,.2)">${icon('ram', 14)}</span></div>
+        <div class="stat-top"><span class="stat-label">Память</span><span class="stat-icon" style="background:rgba(255,255,255,.06);color:#a3a3a3;border-color:rgba(255,255,255,.18)">${icon('ram', 14)}</span></div>
         <div class="stat-value"><span id="stat-mem">${Math.round((usage.memory || 0) / 1024 / 1024)}</span><small>МБ / ${server.limits.memory}</small></div>
         <div class="stat-foot"><span id="stat-mem-pct">${((usage.memory || 0) / 1024 / 1024 / server.limits.memory * 100).toFixed(0)}% от лимита</span></div>
         ${meter(((usage.memory || 0) / 1024 / 1024 / server.limits.memory) * 100, '')}
       </div>
       <div class="card stat">
-        <div class="stat-top"><span class="stat-label">Диск</span><span class="stat-icon" style="background:rgba(192,132,252,.1);color:#d8b4fe;border-color:rgba(192,132,252,.2)">${icon('harddrive', 14)}</span></div>
+        <div class="stat-top"><span class="stat-label">Диск</span><span class="stat-icon" style="background:rgba(255,255,255,.06);color:#d4d4d4;border-color:rgba(255,255,255,.18)">${icon('harddrive', 14)}</span></div>
         <div class="stat-value">${fmtBytes(usage.disk || 0)}</div>
         <div class="stat-foot"><span>лимит ${server.limits.disk / 1024} ГБ</span></div>
         ${meter(((usage.disk || 0) / 1024 / 1024 / server.limits.disk) * 100)}
       </div>
       <div class="card stat">
-        <div class="stat-top"><span class="stat-label">Поток</span><span class="stat-icon" style="background:rgba(74,222,128,.1);color:#86efac;border-color:rgba(74,222,128,.2)">${icon('pulse', 14)}</span></div>
+        <div class="stat-top"><span class="stat-label">Поток</span><span class="stat-icon" style="background:rgba(255,255,255,.06);color:#fff;border-color:rgba(255,255,255,.18)">${icon('pulse', 14)}</span></div>
         <div class="stat-value" style="font-size:22px" data-uptime>${usage.uptimeMs ? fmtDuration(usage.uptimeMs) : '—'}</div>
         <div class="stat-foot"><span>PID ${usage.pid || '—'}</span><span>${usage.players || 0} игроков</span></div>
       </div>
@@ -438,15 +438,15 @@ function manageTab(ctx, data) {
       const memValues = historyValues(usage.history, 'memory', 45).map((v) => Math.round(v / 1024 / 1024));
       if (root.querySelector('#mini-cpu')) {
         areaChart(root.querySelector('#mini-cpu'), {
-          series: [{ values: cpuValues, color: '#7c8cff' }], max: Math.max(10, server.limits.cpu), hideAxis: true, height: 36, format: (n) => `${Math.round(n)}%`,
+          series: [{ values: cpuValues, color: '#ffffff' }], max: Math.max(10, server.limits.cpu), hideAxis: true, height: 36, format: (n) => `${Math.round(n)}%`,
         });
       }
       const chart = root.querySelector('#srv-chart');
       if (chart) {
         areaChart(chart, {
           series: [
-            { values: cpuValues, color: '#7c8cff', label: 'CPU %' },
-            { values: memValues, color: '#38bdf8', label: 'RAM МБ' },
+            { values: cpuValues, color: '#ffffff', label: 'CPU %' },
+            { values: memValues, color: '#a3a3a3', label: 'RAM МБ' },
           ],
           max: Math.max(server.limits.cpu, ...cpuValues),
           height: 210,
@@ -636,7 +636,7 @@ async function filesTab(ctx, data) {
           count.textContent = `${lines} строк · ${area.value.length} символов`;
         };
         updateGutter();
-        area.addEventListener('input', () => { dirty = true; status.textContent = 'есть изменения'; status.style.color = '#fcd34d'; updateGutter(); });
+        area.addEventListener('input', () => { dirty = true; status.textContent = 'есть изменения'; status.style.color = '#a3a3a3'; updateGutter(); });
         area.addEventListener('scroll', () => { gutter.scrollTop = area.scrollTop; });
         area.addEventListener('keydown', (e) => {
           if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
@@ -656,7 +656,7 @@ async function filesTab(ctx, data) {
             await api.put(`/api/servers/${server.id}/files/content`, { path, content: area.value });
             dirty = false;
             status.textContent = 'сохранено';
-            status.style.color = '#86efac';
+            status.style.color = '#ffffff';
             toast('Файл сохранён', path, 'ok', 2200);
             load(state.path);
           } catch (err) {

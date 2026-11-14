@@ -14,7 +14,7 @@ function id(prefix = '') {
 }
 
 function uuid() {
-  // RFC 4122 v4, как в Pterodactyl (uuid сервера / пользователя).
+  // RFC 4122 v4 (uuid сервера / пользователя).
   const b = crypto.randomBytes(16);
   b[6] = (b[6] & 0x0f) | 0x40;
   b[8] = (b[8] & 0x3f) | 0x80;
@@ -197,7 +197,7 @@ function publicUser(u) {
     createdAt: u.createdAt,
     lastLoginAt: u.lastLoginAt || null,
     limits: u.limits,
-    avatarColor: u.avatarColor || '#6f7cff',
+    avatarColor: u.avatarColor || '#262626',
   };
 }
 

@@ -38,7 +38,7 @@ function seed() {
     ...auth.hashPassword('omnidash'),
     limits: { memory: 65536, disk: 524288, cpu: 1600, servers: 100, backups: 50 },
   });
-  admin.avatarColor = '#7c8cff';
+  admin.avatarColor = '#262626';
 
   const steve = db.newUser({
     username: 'steve',

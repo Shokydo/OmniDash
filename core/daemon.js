@@ -2,7 +2,7 @@
 /**
  * OmniDash Daemon («wings-lite»).
  *
- * Запускает процессы серверов так же, как это делает Pterodactyl Wings:
+ * Запускает процессы серверов (wings-lite):
  *  • стартовая команда собирается из шаблона (egg) и переменных сервера;
  *  • консоль читается построчно, хранится в кольцевом буфере и в файле;
  *  • команды уходят в stdin процесса;
@@ -525,7 +525,7 @@ class Daemon extends EventEmitter {
       if (list.length > HISTORY) list.splice(0, list.length - HISTORY);
       this.history.set(server.id, list);
 
-      // Лимит памяти: как в Pterodactyl — предупреждение, затем принудительная остановка.
+      // Лимит памяти: предупреждение, затем принудительная остановка.
       if (server.limits && server.limits.memory && live.memory > server.limits.memory * 1024 * 1024 * 1.02) {
         entry.overMemory = (entry.overMemory || 0) + 1;
         if (entry.overMemory === 3) {
