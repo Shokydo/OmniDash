@@ -125,7 +125,7 @@ await sleep(1200);
 await check('вход и оболочка', async () => {
   if (!(await waitFor('.app'))) throw new Error('оболочка .app не появилась');
   if (!(await waitFor('.content .page'))) throw new Error('контент не отрисован');
-  if (!text('#user-name').includes('admin')) throw new Error('нет имени пользователя в сайдбаре');
+  if (!text('#profile-name').includes('admin')) throw new Error('нет имени пользователя в топбаре');
 });
 
 await check('dashboard', async () => {
@@ -157,7 +157,7 @@ await check('список серверов', async () => {
   console.log('    карточек:', window.document.querySelectorAll('.server-card').length);
 });
 
-const TAB_NAMES = { console: 'Консоль', manage: 'Управление', files: 'Файлы', backups: 'Бэкапы', startup: 'Переменные', access: 'Доступы', schedule: 'Расписание', settings: 'Настройки' };
+const TAB_NAMES = { console: 'Консоль', manage: 'Управление', files: 'Файлы', sftp: 'SFTP', backups: 'Бэкапы', startup: 'Переменные', access: 'Доступы', schedule: 'Расписание', settings: 'Настройки' };
 for (const tab of Object.keys(TAB_NAMES)) {
   await check(`сервер → ${tab}`, async () => {
     window.location.hash = `#/servers/${server.id}/${tab}`;

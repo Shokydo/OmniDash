@@ -598,28 +598,28 @@ export async function allocationsView(ctx) {
     </div>
   </div>`;
 
+  const renderBlocked = () => {
+    const host = document.getElementById('blocked-list');
+    if (!host) return;
+    host.innerHTML = blockedPorts.length
+      ? blockedPorts.map((port) => `<span class="chip mono">${port}<button class="chip-x" data-unblock="${port}" title="Разблокировать">${icon('x', 11)}</button></span>`).join('')
+      : '<span class="tiny dim">нет</span>';
+    host.querySelectorAll('[data-unblock]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        const port = Number(b.dataset.unblock);
+        try {
+          const res = await api.patch('/api/settings', { blockedPorts: blockedPorts.filter((p) => p !== port) });
+          blockedPorts = res.settings.blockedPorts || [];
+          renderBlocked();
+          renderRows();
+          toast('Порт разблокирован', String(port), 'ok');
+        } catch (err) { toast('Ошибка', err.message, 'err'); }
+      });
+    });
+  };
+
   return {
     html,
-    const renderBlocked = () => {
-      const host = document.getElementById('blocked-list');
-      if (!host) return;
-      host.innerHTML = blockedPorts.length
-        ? blockedPorts.map((port) => `<span class="chip mono">${port}<button class="chip-x" data-unblock="${port}" title="Разблокировать">${icon('x', 11)}</button></span>`).join('')
-        : '<span class="tiny dim">нет</span>';
-      host.querySelectorAll('[data-unblock]').forEach((b) => {
-        b.addEventListener('click', async () => {
-          const port = Number(b.dataset.unblock);
-          try {
-            const res = await api.patch('/api/settings', { blockedPorts: blockedPorts.filter((p) => p !== port) });
-            blockedPorts = res.settings.blockedPorts || [];
-            renderBlocked();
-            renderRows();
-            toast('Порт разблокирован', String(port), 'ok');
-          } catch (err) { toast('Ошибка', err.message, 'err'); }
-        });
-      });
-    };
-
     mount(root) {
       renderRows();
       renderBlocked();
