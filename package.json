@@ -1,0 +1,24 @@
+{
+  "name": "omnidash",
+  "version": "1.0.0",
+  "description": "OmniDash — self-hosted панель управления серверами: логин, выдача серверов, доступы, порты, лимиты, сроки, консоль, файлы, бэкапы и автообновление. Замена Pterodactyl без Docker и GitHub.",
+  "main": "server.js",
+  "author": "Shokydo",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node tools/dev.js",
+    "update": "node tools/make-update.js",
+    "test": "node tests/api-smoke.mjs && node tests/ui-smoke.mjs",
+    "test:api": "node tests/api-smoke.mjs",
+    "test:ui": "node tests/ui-smoke.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "jsdom": "^31.0.1"
+  }
+}
