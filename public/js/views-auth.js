@@ -33,6 +33,14 @@ export function loginView(ctx) {
 
     <section class="auth-panel">
       <div class="auth-box">
+        <div class="panel-mini">
+          <span class="pm-icon"><img src="/anime.jpg" alt="OmniDash" /></span>
+          <div>
+            <div class="pm-name">${esc(meta.name || 'OmniDash')}</div>
+            <div class="pm-sub">control plane · v${esc(meta.version || '1.0.0')}</div>
+          </div>
+          <span class="pm-gear" title="Панель">${icon('settings', 16)}</span>
+        </div>
         <div class="auth-mobile-brand">
           <span class="brand-mark">${logoMark(19)}</span>
           <div><div class="brand-name">${esc(meta.name || 'OmniDash')}</div><div class="brand-sub">control plane</div></div>
