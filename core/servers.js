@@ -106,8 +106,21 @@ function nodeUsage(nodeId) {
   };
 }
 
+/** Порты, которые рандомайзер никогда не выдаёт (блоклист админа). */
+function blockedPorts() {
+  return new Set((db.data.settings.blockedPorts || []).map((p) => int(p)).filter((p) => p >= 1 && p <= 65535));
+}
+
+function portRandom() {
+  return db.data.settings.portRandom !== false;
+}
+
 function freeAllocation(nodeId) {
-  return db.data.allocations.find((a) => a.nodeId === nodeId && !a.serverId) || null;
+  const blocked = blockedPorts();
+  const free = db.data.allocations.filter((a) => a.nodeId === nodeId && !a.serverId && !blocked.has(int(a.port)));
+  if (!free.length) return null;
+  if (portRandom()) return free[Math.floor(Math.random() * free.length)];
+  return free[0];
 }
 
 /** Создаёт аллокацию из диапазона узла, если свободных нет. */
@@ -117,23 +130,25 @@ function spawnAllocation(nodeId, extra = {}) {
   const from = int(node.portStart, 25565);
   const to = int(node.portEnd, 25600);
   const existing = new Set(db.data.allocations.filter((a) => a.nodeId === nodeId).map((a) => int(a.port)));
+  const blocked = blockedPorts();
+  const candidates = [];
   for (let port = from; port <= to; port += 1) {
-    if (!existing.has(port)) {
-      const alloc = {
-        id: uuid(),
-        nodeId,
-        ip: node.fqdn === 'localhost' || node.fqdn === '127.0.0.1' ? '0.0.0.0' : node.fqdn,
-        port,
-        serverId: null,
-        createdAt: now(),
-        notes: extra.notes || '',
-      };
-      db.data.allocations.push(alloc);
-      db.save();
-      return alloc;
-    }
+    if (!existing.has(port) && !blocked.has(port)) candidates.push(port);
   }
-  return Object.assign(new Error('Свободных портов в диапазоне узла нет'), { status: 409 });
+  if (!candidates.length) return Object.assign(new Error('Свободных портов в диапазоне узла нет'), { status: 409 });
+  const port = portRandom() ? candidates[Math.floor(Math.random() * candidates.length)] : candidates[0];
+  const alloc = {
+    id: uuid(),
+    nodeId,
+    ip: node.fqdn === 'localhost' || node.fqdn === '127.0.0.1' ? '0.0.0.0' : node.fqdn,
+    port,
+    serverId: null,
+    createdAt: now(),
+    notes: extra.notes || '',
+  };
+  db.data.allocations.push(alloc);
+  db.save();
+  return alloc;
 }
 
 function ensureAllocation(nodeId, serverId) {

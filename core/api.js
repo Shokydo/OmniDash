@@ -1599,7 +1599,12 @@ function createApi(deps) {
         };
       })
       .sort((a, b) => a.port - b.port);
-    return { allocations: list, nodes: db.data.nodes.map((n) => ({ id: n.id, name: n.name })) };
+    return {
+      allocations: list,
+      nodes: db.data.nodes.map((n) => ({ id: n.id, name: n.name })),
+      blockedPorts: db.data.settings.blockedPorts || [],
+      portRandom: db.data.settings.portRandom !== false,
+    };
   });
 
   route('POST', '/api/allocations', (ctx) => {
@@ -1635,8 +1640,11 @@ function createApi(deps) {
     if (!a || !b || b < a) throw bad('Некорректный диапазон портов');
     if (b - a > 500) throw bad('Максимум 500 портов за раз');
     const existing = new Set(db.data.allocations.filter((x) => x.nodeId === node.id).map((x) => int(x.port)));
+    const blocked = new Set((db.data.settings.blockedPorts || []).map((x) => int(x)));
     let created = 0;
+    let skippedBlocked = 0;
     for (let port = a; port <= b; port += 1) {
+      if (blocked.has(port)) { skippedBlocked += 1; continue; }
       if (existing.has(port)) continue;
       db.data.allocations.push({
         id: uuid(), nodeId: node.id, ip: '0.0.0.0', port, serverId: null, notes: '', createdAt: now(),
@@ -1644,8 +1652,8 @@ function createApi(deps) {
       created += 1;
     }
     db.save();
-    db.audit({ action: 'allocation.bulk', actorId: ctx.user.id, actorName: ctx.user.username, target: node.name, meta: { from: a, to: b, created } });
-    return { created };
+    db.audit({ action: 'allocation.bulk', actorId: ctx.user.id, actorName: ctx.user.username, target: node.name, meta: { from: a, to: b, created, skippedBlocked } });
+    return { created, skippedBlocked };
   });
 
   route('DELETE', '/api/allocations/:id', (ctx) => {
@@ -1791,6 +1799,15 @@ function createApi(deps) {
     }
     if (body.defaultEggId !== undefined) {
       s.defaultEggId = body.defaultEggId ? String(body.defaultEggId) : null;
+    }
+    if (body.portRandom !== undefined) s.portRandom = !!body.portRandom;
+    if (Array.isArray(body.blockedPorts)) {
+      const set = new Set();
+      for (const raw of body.blockedPorts) {
+        const n = clamp(int(raw, 0), 1, 65535);
+        if (n) set.add(n);
+      }
+      s.blockedPorts = [...set].sort((a, b) => a - b).slice(0, 1000);
     }
     if (body.sftp && typeof body.sftp === 'object') {
       s.sftp = {

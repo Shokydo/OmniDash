@@ -522,6 +522,8 @@ export async function allocationsView(ctx) {
   const data = await api.get('/api/allocations');
   const allocations = data.allocations || [];
   const nodes = data.nodes || [];
+  let blockedPorts = (data.blockedPorts || []).slice();
+  let portRandom = data.portRandom !== false;
   let nodeFilter = ctx.query.node || '';
   let statusFilter = '';
   let search = '';
@@ -538,7 +540,7 @@ export async function allocationsView(ctx) {
     });
     host.innerHTML = filtered.map((a) => `
       <tr>
-        <td class="mono">${esc(a.ip)}:${esc(a.port)}</td>
+        <td class="mono">${esc(a.ip)}:${esc(a.port)}${blockedPorts.includes(Number(a.port)) ? ' <span class="pill suspended" style="height:18px;font-size:10px"><i></i>заблокирован</span>' : ''}</td>
         <td class="small">${esc(a.nodeName)}</td>
         <td>${a.server ? `<a href="#/servers/${a.server.id}/console">${esc(a.server.name)}</a>` : '<span class="pill green" style="height:20px"><i></i>свободен</span>'}</td>
         <td class="tiny dim">${esc(a.notes || '—')}</td>
@@ -575,6 +577,21 @@ export async function allocationsView(ctx) {
       <div class="segmented" id="alloc-status"><button class="active" data-s="">Все</button><button data-s="free">Свободные</button><button data-s="used">Занятые</button></div>
       <span class="chip right" id="alloc-count">${allocations.length} портов</span>
     </div>
+    <div class="card" style="padding:14px 16px;margin-bottom:14px">
+      <div class="row" style="gap:14px;flex-wrap:wrap;align-items:center">
+        <span class="panel-title">${icon('sliders', 14)} Рандомайзер портов</span>
+        <label class="switch"><input type="checkbox" id="port-random" ${portRandom ? 'checked' : ''}/><span class="track"></span><span class="switch-text">Случайный выбор порта при создании сервера</span></label>
+      </div>
+      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px">
+        <span class="tiny dim">Заблокированные порты (не выпадают в рандоме):</span>
+        <span id="blocked-list" class="row" style="gap:6px;flex-wrap:wrap"></span>
+        <span class="row" style="gap:6px;margin-left:auto">
+          <input class="input mono" id="block-port-input" type="number" min="1" max="65535" placeholder="порт" style="width:110px" />
+          <button class="btn sm" id="block-port-add">${icon('lock', 13)} Заблокировать</button>
+        </span>
+      </div>
+      <div class="tiny dim" style="margin-top:8px">Заблокированный порт не выдаётся новым серверам и не создаётся при массовом добавлении диапазона. Уже выданные серверы не затрагиваются.</div>
+    </div>
     <div class="card table-wrap">
       <table class="table"><thead><tr><th>Адрес</th><th>Узел</th><th>Сервер</th><th>Заметка</th><th></th></tr></thead>
       <tbody id="alloc-body"></tbody></table>
@@ -583,8 +600,51 @@ export async function allocationsView(ctx) {
 
   return {
     html,
+    const renderBlocked = () => {
+      const host = document.getElementById('blocked-list');
+      if (!host) return;
+      host.innerHTML = blockedPorts.length
+        ? blockedPorts.map((port) => `<span class="chip mono">${port}<button class="chip-x" data-unblock="${port}" title="Разблокировать">${icon('x', 11)}</button></span>`).join('')
+        : '<span class="tiny dim">нет</span>';
+      host.querySelectorAll('[data-unblock]').forEach((b) => {
+        b.addEventListener('click', async () => {
+          const port = Number(b.dataset.unblock);
+          try {
+            const res = await api.patch('/api/settings', { blockedPorts: blockedPorts.filter((p) => p !== port) });
+            blockedPorts = res.settings.blockedPorts || [];
+            renderBlocked();
+            renderRows();
+            toast('Порт разблокирован', String(port), 'ok');
+          } catch (err) { toast('Ошибка', err.message, 'err'); }
+        });
+      });
+    };
+
     mount(root) {
       renderRows();
+      renderBlocked();
+      root.querySelector('#port-random').addEventListener('change', async (e) => {
+        try {
+          await api.patch('/api/settings', { portRandom: e.target.checked });
+          toast('Рандомайзер портов', e.target.checked ? 'включён' : 'выключен — порты выдаются по порядку', 'ok');
+        } catch (err) { toast('Ошибка', err.message, 'err'); e.target.checked = !e.target.checked; }
+      });
+      const addBlocked = async () => {
+        const input = root.querySelector('#block-port-input');
+        const port = Number(input.value);
+        if (!port || port < 1 || port > 65535) { toast('Укажите порт', '1–65535', 'warn'); return; }
+        if (blockedPorts.includes(port)) { toast('Порт уже заблокирован', String(port), 'warn'); return; }
+        try {
+          const res = await api.patch('/api/settings', { blockedPorts: [...blockedPorts, port] });
+          blockedPorts = res.settings.blockedPorts || [];
+          input.value = '';
+          renderBlocked();
+          renderRows();
+          toast('Порт заблокирован', String(port), 'ok');
+        } catch (err) { toast('Ошибка', err.message, 'err'); }
+      };
+      root.querySelector('#block-port-add').addEventListener('click', addBlocked);
+      root.querySelector('#block-port-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') addBlocked(); });
       root.querySelector('#alloc-search').addEventListener('input', (e) => { search = e.target.value.trim().toLowerCase(); renderRows(); });
       root.querySelector('#alloc-node').addEventListener('change', (e) => { nodeFilter = e.target.value; renderRows(); });
       root.querySelectorAll('#alloc-status button').forEach((b) => {

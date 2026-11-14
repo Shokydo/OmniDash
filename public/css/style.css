@@ -809,3 +809,8 @@ body[data-density="comfortable"] .card-body { padding: 22px; }
 .drop-zone:hover, .drop-zone.over { border-color: #fff; color: var(--text); background: var(--surface); }
 .drop-zone svg { width: 26px; height: 26px; }
 .drop-title { font-size: 14px; font-weight: 550; color: var(--text); }
+
+/* ── Крестик внутри чипа (блоклист портов) ── */
+.chip-x { display: inline-grid; place-items: center; width: 16px; height: 16px; margin-left: 3px; border: 0; background: transparent; color: var(--text-mute); cursor: pointer; border-radius: 2px; padding: 0; }
+.chip-x:hover { color: #fff; background: rgba(255, 255, 255, .14); }
+.chip-x svg { width: 11px; height: 11px; }

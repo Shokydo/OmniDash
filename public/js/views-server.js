@@ -12,6 +12,7 @@ const TAB_DEFS = [
   { id: 'console', label: 'Консоль', icon: 'terminal', perm: 'console' },
   { id: 'manage', label: 'Управление', icon: 'activity', perm: 'control' },
   { id: 'files', label: 'Файлы', icon: 'folder', perm: 'files' },
+  { id: 'sftp', label: 'SFTP', icon: 'network', perm: 'files' },
   { id: 'backups', label: 'Бэкапы', icon: 'backup', perm: 'backups' },
   { id: 'startup', label: 'Переменные', icon: 'sliders', perm: 'startup' },
   { id: 'access', label: 'Доступы', icon: 'users', perm: 'users' },
@@ -32,6 +33,7 @@ export async function serverView(ctx) {
   if (tab === 'console') tabResult = consoleTab(ctx, data);
   else if (tab === 'manage') tabResult = manageTab(ctx, data);
   else if (tab === 'files') tabResult = await filesTab(ctx, data);
+  else if (tab === 'sftp') tabResult = await sftpTab(ctx, data);
   else if (tab === 'backups') tabResult = await backupsTab(ctx, data);
   else if (tab === 'startup') tabResult = await startupTab(ctx, data);
   else if (tab === 'access') tabResult = await accessTab(ctx, data);
@@ -474,13 +476,69 @@ function manageTab(ctx, data) {
 
 /* ═════════════════════════════ файлы ═════════════════════════════ */
 
+async function sftpTab(ctx, data) {
+  const server = data.server;
+  const can = (p) => server.permissions.includes(p) || server.isAdmin;
+  if (!can('files')) return { html: emptyState('lock', 'Нет доступа к файлам', 'Владелец сервера не выдал право «Файлы».') };
+  let sftpInfo = null;
+  try { sftpInfo = await api.get('/api/sftp'); } catch { sftpInfo = null; }
+
+  if (!sftpInfo || !sftpInfo.enabled) {
+    return {
+      html: `<div class="card">${emptyState('network', 'SFTP выключен', 'Администратор панели отключил SFTP в настройках. Файлы доступны во вкладке «Файлы».')}</div>`,
+      mount() {},
+    };
+  }
+
+  const host = (typeof location !== 'undefined' && location.hostname) || 'localhost';
+  const conn = `sftp://${sftpInfo.username}@${host}:${sftpInfo.port}`;
+  const html = `
+  <div class="card sftp-card">
+    <div class="sftp-head">
+      <span class="panel-title">${icon('network', 14)} Подключение по SFTP</span>
+      <span class="chip">${sftpInfo.running ? 'работает' : 'не запущен'}</span>
+    </div>
+    <div class="sftp-grid">
+      <div class="sftp-cell"><span class="tiny dim">Хост</span><code>${esc(host)}</code></div>
+      <div class="sftp-cell"><span class="tiny dim">Порт</span><code>${sftpInfo.port}</code></div>
+      <div class="sftp-cell"><span class="tiny dim">Логин</span><code>${esc(sftpInfo.username)}</code></div>
+      <div class="sftp-cell"><span class="tiny dim">Пароль</span><span class="tiny">пароль от аккаунта панели</span></div>
+    </div>
+    <div class="sftp-foot">
+      <code class="sftp-conn" id="sftp-conn">${esc(conn)}</code>
+      <button class="btn sm" id="sftp-copy">${icon('copy', 13)} Копировать</button>
+    </div>
+    <div class="tiny dim">В SFTP-клиенте (FileZilla, WinSCP, scp) после входа виден список ваших серверов — папка каждого сервера открывается как его каталог файлов. Этот сервер — папка <span class="mono">${esc(server.name)}</span>.</div>
+  </div>
+  <div class="card">
+    <div class="panel-title" style="margin-bottom:10px">${icon('info', 14)} Как подключиться</div>
+    <div class="stack tiny" style="line-height:1.6">
+      <div><b>1.</b> Откройте любой SFTP-клиент: FileZilla, WinSCP, Cyberduck или терминал (<span class="mono">scp</span>, <span class="mono">sftp</span>).</div>
+      <div><b>2.</b> Введите хост, порт и логин из карточки выше. Пароль — тот же, что от панели.</div>
+      <div><b>3.</b> После входа слева появится список ваших серверов. Откройте папку нужного — внутри его файлы: <span class="mono">server.properties</span>, миры, плагины и т.д.</div>
+      <div><b>4.</b> Если панель работает на виртуальной машине с NAT, порт SFTP (${sftpInfo.port}) нужно пробросить в VirtualBox так же, как порт панели (7777).</div>
+    </div>
+  </div>`;
+
+  return {
+    html,
+    mount() {
+      const btn = document.getElementById('sftp-copy');
+      if (btn) {
+        btn.addEventListener('click', () => {
+          const el = document.getElementById('sftp-conn');
+          if (el) copy(el.textContent, 'Строка подключения скопирована');
+        });
+      }
+    },
+  };
+}
+
 async function filesTab(ctx, data) {
   const server = data.server;
   const can = (p) => server.permissions.includes(p) || server.isAdmin;
   if (!can('files')) return { html: emptyState('lock', 'Нет доступа к файлам', 'Владелец сервера не выдал право «Файлы».') };
   const rootListing = await api.get(`/api/servers/${server.id}/files`, { path: '' });
-  let sftpInfo = null;
-  try { sftpInfo = await api.get('/api/sftp'); } catch { sftpInfo = null; }
   let state = { path: '', entries: rootListing.entries, usage: rootListing.usage };
   let selection = new Set();
   let treeEntries = [];
@@ -491,31 +549,7 @@ async function filesTab(ctx, data) {
     treeEntries = treeRes.entries || [];
   } catch { treeEntries = []; }
 
-  const sftpHost = (typeof location !== 'undefined' && location.hostname) || 'localhost';
-  const sftpConn = sftpInfo && sftpInfo.enabled
-    ? `sftp://${sftpInfo.username}@${sftpHost}:${sftpInfo.port}`
-    : '';
-  const sftpCard = sftpInfo && sftpInfo.enabled ? `
-  <div class="card sftp-card">
-    <div class="sftp-head">
-      <span class="panel-title">${icon('network', 14)} Подключение по SFTP</span>
-      <span class="chip">${sftpInfo.running ? 'работает' : 'не запущен'}</span>
-    </div>
-    <div class="sftp-grid">
-      <div class="sftp-cell"><span class="tiny dim">Хост</span><code>${esc(sftpHost)}</code></div>
-      <div class="sftp-cell"><span class="tiny dim">Порт</span><code>${sftpInfo.port}</code></div>
-      <div class="sftp-cell"><span class="tiny dim">Логин</span><code>${esc(sftpInfo.username)}</code></div>
-      <div class="sftp-cell"><span class="tiny dim">Пароль</span><span class="tiny">пароль от аккаунта панели</span></div>
-    </div>
-    <div class="sftp-foot">
-      <code class="sftp-conn" id="sftp-conn">${esc(sftpConn)}</code>
-      <button class="btn sm" id="sftp-copy">${icon('copy', 13)} Копировать</button>
-    </div>
-    <div class="tiny dim">В SFTP-клиенте (FileZilla, WinSCP, scp) после входа виден список ваших серверов — папка каждого сервера открывается как его каталог файлов.</div>
-  </div>` : '';
-
   const html = `
-  ${sftpCard}
   <div class="files-layout">
     <aside class="card files-tree-card">
       <div class="files-tree-head">
@@ -1012,13 +1046,6 @@ async function filesTab(ctx, data) {
     mount() {
       render();
       bindSearch();
-      const sftpCopy = document.getElementById('sftp-copy');
-      if (sftpCopy) {
-        sftpCopy.addEventListener('click', () => {
-          const el = document.getElementById('sftp-conn');
-          if (el) copy(el.textContent, 'Строка подключения скопирована');
-        });
-      }
       const uploadInput = document.getElementById('file-upload');
       if (uploadInput) {
         uploadInput.addEventListener('change', async () => {

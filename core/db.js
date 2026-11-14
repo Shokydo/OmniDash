@@ -33,6 +33,8 @@ const DEFAULT_SETTINGS = {
   motd: '',
   locale: 'ru',
   sftp: { enabled: true, port: 2222 },
+  portRandom: true,
+  blockedPorts: [],
 };
 
 const DEFAULT_DATA = () => ({
