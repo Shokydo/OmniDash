@@ -157,20 +157,12 @@ function startApp() {
         </div>
       </div>
       <div class="side-servers" id="side-servers">
-        <a class="side-all" id="side-all" href="#/servers">
-          ${icon('servers', 14)}<span>Все серверы</span>
-          <span class="count" id="side-all-count">0</span>
-        </a>
         <div class="side-servers-head">
-          <span>Доступные мне</span>
+          <span>Серверы</span>
           <span class="count" id="side-servers-count">0</span>
         </div>
         <div class="side-servers-list" id="side-servers-list"></div>
         <button class="side-create" id="side-create">${icon('plus', 13)}<span>Создать сервер</span></button>
-        <div class="side-servers-foot">
-          <span class="tiny dim" id="side-servers-active">Активно 0/0</span>
-          <span class="tiny dim mono">v${esc(S.meta.version)}</span>
-        </div>
       </div>
     </aside>
     <div class="main">
@@ -181,8 +173,24 @@ function startApp() {
             ${icon('search', 14)}<span>Поиск и команды</span><span class="kbd">⌘K</span>
           </button>
           <span class="chip" id="sse-status" style="height:30px"><span class="live-dot" id="live-dot-2"></span><span class="tiny">live</span></span>
-          <a class="icon-btn" href="#/profile" id="profile-link" title="Профиль"></a>
-          <button class="icon-btn" id="logout-btn" title="Выйти из панели">${icon('logout', 16)}</button>
+          <div class="profile-menu" id="profile-menu">
+            <button class="profile-btn" id="profile-btn" title="Профиль">
+              <span id="profile-link"></span>
+              <span class="profile-name" id="profile-name"></span>
+              ${icon('chevronDown', 13)}
+            </button>
+            <div class="profile-dropdown hidden" id="profile-dropdown">
+              <div class="pd-head">
+                <span id="pd-avatar"></span>
+                <div class="pd-meta">
+                  <div class="pd-name" id="pd-name"></div>
+                  <div class="pd-role" id="pd-role"></div>
+                </div>
+              </div>
+              <a class="pd-item" href="#/profile">${icon('user', 14)}<span>Настройка</span></a>
+              <button class="pd-item danger" id="pd-logout">${icon('logout', 14)}<span>Выход</span></button>
+            </div>
+          </div>
         </div>
       </header>
       <main class="content" id="content"></main>
@@ -195,7 +203,21 @@ function startApp() {
   connectSSE();
   document.getElementById('nav')?.addEventListener('click', () => document.body.classList.remove('nav-open'));
   document.getElementById('search-open')?.addEventListener('click', openPalette);
-  document.getElementById('logout-btn')?.addEventListener('click', () => logout());
+  const profileBtn = document.getElementById('profile-btn');
+  const profileDropdown = document.getElementById('profile-dropdown');
+  if (profileBtn && profileDropdown) {
+    profileBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      profileDropdown.classList.toggle('hidden');
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#profile-menu')) profileDropdown.classList.add('hidden');
+    });
+    profileDropdown.querySelectorAll('a, button').forEach((el) => {
+      el.addEventListener('click', () => profileDropdown.classList.add('hidden'));
+    });
+  }
+  document.getElementById('pd-logout')?.addEventListener('click', () => logout());
   const sideCreate = document.getElementById('side-create');
   const canCreate = isAdmin() || ((S.me.permissions || []).includes('servers.create'));
   if (sideCreate) {
@@ -220,6 +242,14 @@ function renderUserChrome() {
   if (roleEl) roleEl.textContent = S.me.role === 'admin' ? 'администратор' : 'пользователь';
   const profileLink = document.getElementById('profile-link');
   if (profileLink) profileLink.innerHTML = avatar(S.me, 'sm');
+  const profileName = document.getElementById('profile-name');
+  if (profileName) profileName.textContent = S.me.username;
+  const pdAvatar = document.getElementById('pd-avatar');
+  if (pdAvatar) pdAvatar.innerHTML = avatar(S.me);
+  const pdName = document.getElementById('pd-name');
+  if (pdName) pdName.textContent = S.me.username;
+  const pdRole = document.getElementById('pd-role');
+  if (pdRole) pdRole.textContent = S.me.role === 'admin' ? 'Администратор' : 'Пользователь';
   const brandName = document.getElementById('brand-name');
   if (brandName) brandName.textContent = S.meta.name || 'OmniDash';
 }
@@ -261,10 +291,7 @@ function renderSideServers() {
   const count = document.getElementById('side-servers-count');
   if (!list) return;
   if (count) count.textContent = String(S.servers.length);
-  const allCount = document.getElementById('side-all-count');
-  if (allCount) allCount.textContent = String(S.servers.length);
-  const allBtn = document.getElementById('side-all');
-  if (allBtn) allBtn.classList.toggle('active', S.route && (S.route.name === 'servers' || S.route.name === 'dashboard'));
+
   const activeId = S.route && S.route.name === 'server' ? S.route.params.id : null;
   if (!S.servers.length) {
     list.innerHTML = '<div class="side-empty">Серверов нет</div>';
@@ -285,11 +312,7 @@ function renderSideServers() {
       <span class="ss-dot ${esc(s.status)}" title="${esc(s.status)}"></span>
     </a>`;
   }).join('');
-  const activeEl = document.getElementById('side-servers-active');
-  if (activeEl) {
-    const running = S.servers.filter((s) => s.status === 'running' || s.status === 'starting').length;
-    activeEl.textContent = `Активно ${running}/${S.servers.length}`;
-  }
+
 }
 
 /* ═════════════════════════════ роутер ═════════════════════════════ */

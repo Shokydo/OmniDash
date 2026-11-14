@@ -134,40 +134,57 @@ export async function backupsTab(ctx, data) {
 
 /* ═════════════════════════════ переменные ═════════════════════════════ */
 
-export function startupTab(ctx, data) {
+export async function startupTab(ctx, data) {
   const server = data.server;
   const egg = data.egg || { variables: [], startup: '', config: {}, image: '' };
-  const env = server.environment || {};
-  const vars = egg.variables || [];
+  let propsData = { exists: false, props: {}, raw: '' };
+  try {
+    propsData = await api.get(`/api/servers/${server.id}/files/props`);
+  } catch { propsData = { exists: false, props: {}, raw: '' }; }
+  const props = propsData.props || {};
+  const keys = Object.keys(props);
 
   const html = `
   <div class="grid split">
     <div class="stack">
-      <form class="card" id="startup-form">
+      <div class="card">
         <div class="card-head">
-          <div class="panel-title">${icon('sliders', 15)} Переменные запуска</div>
-          <span class="chip">${vars.length} переменных</span>
+          <div class="panel-title">${icon('filetext', 15)} server.properties</div>
+          <span class="chip">${keys.length} свойств</span>
         </div>
         <div class="card-body stack">
-          ${vars.length ? vars.map((v) => `
-            <div class="field">
-              <label>${esc(v.label || v.env)} <span class="mono dim" style="font-weight:400">${esc(v.env)}</span></label>
-              <input class="input mono" name="env_${esc(v.env)}" value="${esc(env[v.env] !== undefined ? env[v.env] : v.default || '')}" ${v.userEditable === false && !server.isAdmin ? 'disabled' : ''} />
-              ${v.rules && v.rules !== 'string' ? `<span class="hint">правило: ${esc(v.rules)}</span>` : ''}
-            </div>`).join('') : `<div class="notice">${icon('info', 16)}<div>У этого шаблона нет переменных. Стартовую команду можно изменить ниже.</div></div>`}
-          ${server.isAdmin ? `
-          <div class="field">
-            <label>Стартовая команда <span class="dim">— переопределение</span></label>
-            <textarea class="textarea mono" name="startupOverride" rows="3" placeholder="${esc(egg.startup || '')}">${esc(server.startupOverride || '')}</textarea>
-            <span class="hint">Оставьте пустым, чтобы использовать команду шаблона. Поддерживаются <span class="mono">{{PORT}}</span>, <span class="mono">{{MEMORY}}</span>, <span class="mono">{{SERVER_DIR}}</span>.</span>
-          </div>` : `
-          <div class="notice">${icon('lock', 16)}<div>Стартовую команду могут менять только администраторы. Переменные выше — ваши.</div></div>`}
+          ${!propsData.exists ? `<div class="notice">${icon('info', 16)}<div>Файл ещё не создан. Заполните свойства ниже и сохраните — файл создастся автоматически.</div></div>` : ''}
+          <div class="row" style="gap:8px">
+            <input class="input mono" id="prop-key" placeholder="ключ" style="flex:1" />
+            <input class="input mono" id="prop-value" placeholder="значение" style="flex:1" />
+            <button class="btn sm" id="prop-add" type="button">${icon('plus', 13)} Добавить</button>
+          </div>
+          <div id="props-list" class="stack" style="gap:6px;max-height:46vh;overflow:auto">
+            ${keys.length ? keys.map((k) => `
+              <div class="row prop-row" style="gap:8px">
+                <span class="mono small" style="width:180px;flex:none">${esc(k)}</span>
+                <input class="input mono" data-prop="${esc(k)}" value="${esc(props[k])}" style="flex:1" />
+                <button class="btn sm ghost danger" data-prop-del="${esc(k)}" title="Удалить" type="button">${icon('trash', 13)}</button>
+              </div>`).join('') : '<div class="tiny dim">Свойств нет.</div>'}
+          </div>
+          <div class="hint">Значения с не-ASCII символами экранируются как \\uXXXX. Изменения применятся при следующем запуске.</div>
           <div class="row">
-            <button class="btn primary" type="submit">${icon('save', 14)} Сохранить переменные</button>
-            <span class="hint">Изменения применятся при следующем запуске.</span>
+            <button class="btn primary" id="props-save">${icon('save', 14)} Сохранить server.properties</button>
           </div>
         </div>
-      </form>
+      </div>
+      ${server.isAdmin ? `
+      <form class="card" id="startup-form">
+        <div class="card-head"><div class="panel-title">${icon('terminal', 15)} Стартовая команда</div><span class="chip">админ</span></div>
+        <div class="card-body stack">
+          <div class="field">
+            <label>Переопределение команды</label>
+            <textarea class="textarea mono" name="startupOverride" rows="3" placeholder="${esc(egg.startup || '')}">${esc(server.startupOverride || '')}</textarea>
+            <span class="hint">Оставьте пустым для команды шаблона. Поддерживаются <span class="mono">{{PORT}}</span>, <span class="mono">{{MEMORY}}</span>, <span class="mono">{{SERVER_DIR}}</span>.</span>
+          </div>
+          <div class="row"><button class="btn primary" type="submit">${icon('save', 14)} Сохранить команду</button></div>
+        </div>
+      </form>` : `<div class="notice">${icon('lock', 16)}<div>Стартовую команду могут менять только администраторы. server.properties выше — ваш.</div></div>`}
     </div>
     <div class="stack">
       <div class="card">
@@ -189,7 +206,7 @@ export function startupTab(ctx, data) {
             `PORT=${server.allocation ? server.allocation.port : ''}`,
             `MEMORY=${server.limits.memory}`,
             `SERVER_DIR=data/servers/${server.id}`,
-            ...Object.entries(env).map(([k, v]) => `${k}=${v}`),
+            ...Object.entries(server.environment || {}).map(([k, v]) => `${k}=${v}`),
           ].join('\n'))}</div>
         </div>
       </div>
@@ -199,22 +216,49 @@ export function startupTab(ctx, data) {
   return {
     html,
     mount(root) {
-      const form = root.querySelector('#startup-form');
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const raw = serializeForm(form);
-        const environment = {};
-        Object.entries(raw).forEach(([k, v]) => {
-          if (k.startsWith('env_')) environment[k.slice(4)] = v;
-        });
+      const list = root.querySelector('#props-list');
+      const addRow = (key, value) => {
+        const empty = list.querySelector('.tiny.dim');
+        if (empty) empty.remove();
+        const row = document.createElement('div');
+        row.className = 'row prop-row';
+        row.style.gap = '8px';
+        row.innerHTML = `<span class="mono small" style="width:180px;flex:none">${esc(key)}</span><input class="input mono" data-prop="${esc(key)}" value="${esc(value)}" style="flex:1" /><button class="btn sm ghost danger" data-prop-del="${esc(key)}" title="Удалить" type="button">${icon('trash', 13)}</button>`;
+        list.appendChild(row);
+        row.querySelector('[data-prop-del]').addEventListener('click', () => row.remove());
+      };
+      root.querySelector('#prop-add')?.addEventListener('click', () => {
+        const k = root.querySelector('#prop-key').value.trim();
+        const v = root.querySelector('#prop-value').value;
+        if (!k) return;
+        addRow(k, v);
+        root.querySelector('#prop-key').value = '';
+        root.querySelector('#prop-value').value = '';
+      });
+      list.querySelectorAll('[data-prop-del]').forEach((btn) => {
+        btn.addEventListener('click', () => btn.closest('.prop-row').remove());
+      });
+      root.querySelector('#props-save')?.addEventListener('click', async () => {
+        const out = {};
+        list.querySelectorAll('[data-prop]').forEach((input) => { out[input.dataset.prop] = input.value; });
         try {
-          const payload = { environment };
-          if (server.isAdmin) payload.startupOverride = raw.startupOverride || null;
-          await api.post(`/api/servers/${server.id}/startup`, payload);
-          toast('Переменные сохранены', 'Применятся при следующем запуске', 'ok');
+          await api.put(`/api/servers/${server.id}/files/props`, { props: out });
+          toast('server.properties сохранён', `${Object.keys(out).length} свойств`, 'ok');
           ctx.refresh();
         } catch (err) { toast('Ошибка', err.message, 'err'); }
       });
+      const form = root.querySelector('#startup-form');
+      if (form) {
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const raw = serializeForm(form);
+          try {
+            await api.post(`/api/servers/${server.id}/startup`, { startupOverride: raw.startupOverride || null });
+            toast('Команда сохранена', 'Применится при следующем запуске', 'ok');
+            ctx.refresh();
+          } catch (err) { toast('Ошибка', err.message, 'err'); }
+        });
+      }
       return () => { };
     },
   };

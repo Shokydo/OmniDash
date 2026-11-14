@@ -292,11 +292,25 @@ export async function rolesView(ctx) {
   </div>`;
 
   function permCheckboxes(selected = []) {
-    return permissions.map((p) => `
-      <label class="switch" style="display:flex;align-items:center;gap:8px;padding:6px 0">
-        <input type="checkbox" name="perm_${esc(p.id)}" ${selected.includes(p.id) ? 'checked' : ''} />
-        <span class="switch-text">${esc(p.label)} <span class="mono dim" style="font-weight:400">${esc(p.id)}</span></span>
-      </label>`).join('');
+    const groups = [
+      { title: 'Серверы', ids: ['servers.create', 'servers.manage', 'servers.delete', 'backups.manage'] },
+      { title: 'Панель', ids: ['users.manage', 'nodes.manage', 'eggs.manage', 'roles.manage', 'settings.manage', 'updates.manage', 'audit.view'] },
+    ];
+    const byId = Object.fromEntries(permissions.map((p) => [p.id, p]));
+    return groups.map((g) => `
+      <div style="margin-bottom:12px">
+        <div class="label" style="margin-bottom:4px">${esc(g.title)}</div>
+        ${g.ids.filter((id) => byId[id]).map((id) => {
+          const p = byId[id];
+          return `
+          <label class="perm-check">
+            <input type="checkbox" name="perm_${esc(p.id)}" ${selected.includes(p.id) ? 'checked' : ''} />
+            <span class="perm-box">${icon('check', 12)}</span>
+            <span class="perm-label">${esc(p.label)}</span>
+            <span class="mono dim perm-id">${esc(p.id)}</span>
+          </label>`;
+        }).join('')}
+      </div>`).join('');
   }
 
   function roleForm(role) {
@@ -308,12 +322,24 @@ export async function rolesView(ctx) {
       body: `<form class="stack" id="role-form">
         <div class="field"><label>Название роли</label><input class="input" name="name" value="${esc(role ? role.name : '')}" placeholder="Модератор, Хелпер…" required /></div>
         <div>
-          <div class="label" style="margin-bottom:6px">Разрешения</div>
+          <div class="row" style="margin-bottom:8px">
+            <div class="label">Разрешения</div>
+            <span class="right row" style="gap:6px">
+              <button class="btn sm ghost" type="button" id="perm-all">Все</button>
+              <button class="btn sm ghost" type="button" id="perm-none">Сброс</button>
+            </span>
+          </div>
           ${permCheckboxes(role ? role.permissions : [])}
         </div>
       </form>`,
       footer: `<button class="btn" data-close>Отмена</button><button class="btn primary" id="role-ok">${icon('save', 14)} Сохранить</button>`,
       onMount: (overlay, close) => {
+        overlay.querySelector('#perm-all')?.addEventListener('click', () => {
+          overlay.querySelectorAll('input[name^="perm_"]').forEach((c) => { c.checked = true; });
+        });
+        overlay.querySelector('#perm-none')?.addEventListener('click', () => {
+          overlay.querySelectorAll('input[name^="perm_"]').forEach((c) => { c.checked = false; });
+        });
         overlay.querySelector('#role-ok').addEventListener('click', async () => {
           const form = overlay.querySelector('#role-form');
           const v = serializeForm(form);

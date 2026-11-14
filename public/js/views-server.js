@@ -33,7 +33,7 @@ export async function serverView(ctx) {
   else if (tab === 'manage') tabResult = manageTab(ctx, data);
   else if (tab === 'files') tabResult = await filesTab(ctx, data);
   else if (tab === 'backups') tabResult = await backupsTab(ctx, data);
-  else if (tab === 'startup') tabResult = startupTab(ctx, data);
+  else if (tab === 'startup') tabResult = await startupTab(ctx, data);
   else if (tab === 'access') tabResult = await accessTab(ctx, data);
   else if (tab === 'schedule') tabResult = await scheduleTab(ctx, data);
   else if (tab === 'settings') tabResult = await settingsTab(ctx, data);
