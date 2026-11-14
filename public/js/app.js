@@ -164,6 +164,17 @@ function startApp() {
         <div class="side-servers-list" id="side-servers-list"></div>
         <button class="side-create" id="side-create">${icon('plus', 13)}<span>Создать сервер</span></button>
       </div>
+      <div class="sidebar-foot">
+        <button class="user-card" id="user-card">
+          <span id="user-avatar"></span>
+          <span class="meta">
+            <span class="name" id="user-name"></span>
+            <span class="role" id="user-role"></span>
+          </span>
+          ${icon('chevronRight', 14)}
+        </button>
+        <button class="side-action" id="logout-btn">${icon('logout', 15)}<span>Выйти</span></button>
+      </div>
     </aside>
     <div class="main">
       <header class="topbar">
@@ -173,24 +184,6 @@ function startApp() {
             ${icon('search', 14)}<span>Поиск и команды</span><span class="kbd">⌘K</span>
           </button>
           <span class="chip" id="sse-status" style="height:30px"><span class="live-dot" id="live-dot-2"></span><span class="tiny">live</span></span>
-          <div class="profile-menu" id="profile-menu">
-            <button class="profile-btn" id="profile-btn" title="Профиль">
-              <span id="profile-link"></span>
-              <span class="profile-name" id="profile-name"></span>
-              ${icon('chevronDown', 13)}
-            </button>
-            <div class="profile-dropdown hidden" id="profile-dropdown">
-              <div class="pd-head">
-                <span id="pd-avatar"></span>
-                <div class="pd-meta">
-                  <div class="pd-name" id="pd-name"></div>
-                  <div class="pd-role" id="pd-role"></div>
-                </div>
-              </div>
-              <a class="pd-item" href="#/profile">${icon('user', 14)}<span>Настройка</span></a>
-              <button class="pd-item danger" id="pd-logout">${icon('logout', 14)}<span>Выход</span></button>
-            </div>
-          </div>
         </div>
       </header>
       <main class="content" id="content"></main>
@@ -203,21 +196,8 @@ function startApp() {
   connectSSE();
   document.getElementById('nav')?.addEventListener('click', () => document.body.classList.remove('nav-open'));
   document.getElementById('search-open')?.addEventListener('click', openPalette);
-  const profileBtn = document.getElementById('profile-btn');
-  const profileDropdown = document.getElementById('profile-dropdown');
-  if (profileBtn && profileDropdown) {
-    profileBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      profileDropdown.classList.toggle('hidden');
-    });
-    document.addEventListener('click', (e) => {
-      if (!e.target.closest('#profile-menu')) profileDropdown.classList.add('hidden');
-    });
-    profileDropdown.querySelectorAll('a, button').forEach((el) => {
-      el.addEventListener('click', () => profileDropdown.classList.add('hidden'));
-    });
-  }
-  document.getElementById('pd-logout')?.addEventListener('click', () => logout());
+  document.getElementById('user-card')?.addEventListener('click', () => { location.hash = '#/profile'; });
+  document.getElementById('logout-btn')?.addEventListener('click', () => logout());
   const sideCreate = document.getElementById('side-create');
   const canCreate = isAdmin() || ((S.me.permissions || []).includes('servers.create'));
   if (sideCreate) {
@@ -242,14 +222,6 @@ function renderUserChrome() {
   if (roleEl) roleEl.textContent = S.me.role === 'admin' ? 'администратор' : 'пользователь';
   const profileLink = document.getElementById('profile-link');
   if (profileLink) profileLink.innerHTML = avatar(S.me, 'sm');
-  const profileName = document.getElementById('profile-name');
-  if (profileName) profileName.textContent = S.me.username;
-  const pdAvatar = document.getElementById('pd-avatar');
-  if (pdAvatar) pdAvatar.innerHTML = avatar(S.me);
-  const pdName = document.getElementById('pd-name');
-  if (pdName) pdName.textContent = S.me.username;
-  const pdRole = document.getElementById('pd-role');
-  if (pdRole) pdRole.textContent = S.me.role === 'admin' ? 'Администратор' : 'Пользователь';
   const brandName = document.getElementById('brand-name');
   if (brandName) brandName.textContent = S.meta.name || 'OmniDash';
 }

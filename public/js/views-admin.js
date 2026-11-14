@@ -133,8 +133,7 @@ export async function usersView(ctx) {
           <div class="field"><label>Логин</label><input class="input" name="username" placeholder="nickname" required /></div>
           <div class="field"><label>E-mail</label><input class="input" name="email" type="email" placeholder="user@example.com" /></div>
           <div class="field"><label>Пароль</label><input class="input" name="password" type="text" value="${Math.random().toString(36).slice(2, 10)}" /></div>
-          <div class="field"><label>Роль</label><select class="select" name="role"><option value="user">Пользователь</option><option value="admin">Администратор</option></select></div>
-          <div class="field"><label>Кастомная роль</label><select class="select" name="roleId"><option value="">— без кастомной роли —</option>${roles.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('')}</select></div>
+          <div class="field"><label>Роль</label><select class="select" name="rolePick"><option value="user">Пользователь</option><option value="admin">Администратор</option>${roles.map((r) => `<option value="role:${esc(r.id)}">${esc(r.name)}</option>`).join('')}</select></div>
         </div>
         <div class="notice">${icon('info', 16)}<div>Лимиты задаются на каждом сервере (вкладка «Настройки» сервера). У пользователя — только аккаунт, роль и список подключённых серверов.</div></div>
       </form>`,
@@ -144,7 +143,9 @@ export async function usersView(ctx) {
           const form = overlay.querySelector('#user-form');
           const v = serializeForm(form);
           try {
-            await api.post('/api/users', { username: v.username, email: v.email, password: v.password, role: v.role, roleId: v.roleId || null });
+            const pick = v.rolePick || 'user';
+            const isCustom = String(pick).startsWith('role:');
+            await api.post('/api/users', { username: v.username, email: v.email, password: v.password, role: isCustom ? 'user' : pick, roleId: isCustom ? pick.slice(5) : null });
             toast('Пользователь создан', v.username, 'ok');
             close();
             ctx.refresh();
@@ -164,13 +165,10 @@ export async function usersView(ctx) {
         <form class="stack" id="edit-user-form">
           <div class="form-grid">
             <div class="field"><label>E-mail</label><input class="input" name="email" value="${esc(user.email || '')}" /></div>
-            <div class="field"><label>Роль</label><select class="select" name="role" ${user.id === ctx.me.id ? 'disabled' : ''}>
-              <option value="user" ${user.role === 'user' ? 'selected' : ''}>Пользователь</option>
-              <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Администратор</option>
-            </select></div>
-            <div class="field"><label>Кастомная роль</label><select class="select" name="roleId">
-              <option value="">— без кастомной роли —</option>
-              ${roles.map((r) => `<option value="${esc(r.id)}" ${user.roleId === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}
+            <div class="field"><label>Роль</label><select class="select" name="rolePick" ${user.id === ctx.me.id ? 'disabled' : ''}>
+              <option value="user" ${!user.roleId && user.role === 'user' ? 'selected' : ''}>Пользователь</option>
+              <option value="admin" ${!user.roleId && user.role === 'admin' ? 'selected' : ''}>Администратор</option>
+              ${roles.map((r) => `<option value="role:${esc(r.id)}" ${user.roleId === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}
             </select></div>
           </div>
           <div class="notice">${icon('info', 16)}<div>Лимиты задаются на каждом сервере (вкладка «Настройки» сервера).</div></div>
@@ -193,7 +191,9 @@ export async function usersView(ctx) {
           e.preventDefault();
           const v = serializeForm(form);
           try {
-            await api.patch(`/api/users/${user.id}`, { email: v.email, role: v.role, roleId: v.roleId || null });
+            const pick = v.rolePick || 'user';
+            const isCustom = String(pick).startsWith('role:');
+            await api.patch(`/api/users/${user.id}`, { email: v.email, role: isCustom ? 'user' : pick, roleId: isCustom ? pick.slice(5) : null });
             toast('Сохранено', '', 'ok');
             close();
             ctx.refresh();
