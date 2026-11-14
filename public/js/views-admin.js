@@ -3,10 +3,19 @@ import { api } from './api.js';
 import { icon } from './icons.js';
 import {
   esc, fmtBytes, fmtMb, fmtNum, fmtDateTime, fmtDuration, timeAgo, statusPill, avatar,
-  meter, emptyState, modal, toast, confirmDialog, serializeForm, copy,
+  meter, emptyState, modal, toast, confirmDialog, serializeForm, copy, fileToDataUrl,
 } from './ui.js';
 import { actionMeta, TONE_COLORS } from './labels.js';
 import { openCreateServer } from './views-servers.js';
+
+const LIMIT_FIELDS = [
+  ['servers', 'Серверы', 'шт'],
+  ['memory', 'Память', 'МБ'],
+  ['disk', 'Диск', 'МБ'],
+  ['cpu', 'CPU / сервер', '%'],
+  ['backups', 'Бэкапы', 'шт'],
+  ['ports', 'Порты / сервер', 'шт'],
+];
 
 /* ═════════════════════════════ пользователи ═════════════════════════════ */
 
@@ -1056,15 +1065,29 @@ export async function profileView(ctx) {
     <div class="grid split">
       <div class="stack">
         <div class="card">
-          <div class="card-body row" style="gap:14px">
-            ${avatar(user, 'lg')}
-            <div class="grow">
-              <div style="font-size:18px;font-weight:640">${esc(user.username)}</div>
-              <div class="tiny dim">${esc(user.email || 'e-mail не указан')} · создан ${fmtDateTime(user.createdAt)}</div>
-              <div class="row tiny dim" style="margin-top:6px;gap:8px">
-                <span>последний вход: ${user.lastLoginAt ? timeAgo(user.lastLoginAt) : '—'}</span>
-                ${user.suspended ? '<span class="tag suspended">заблокирован</span>' : ''}
+          <div class="card-body stack">
+            <div class="row" style="gap:14px">
+              ${avatar(user, 'lg')}
+              <div class="grow">
+                <div style="font-size:18px;font-weight:640">${esc(user.username)}</div>
+                <div class="tiny dim">${esc(user.email || 'e-mail не указан')} · создан ${fmtDateTime(user.createdAt)}</div>
+                <div class="row tiny dim" style="margin-top:6px;gap:8px">
+                  <span>последний вход: ${user.lastLoginAt ? timeAgo(user.lastLoginAt) : '—'}</span>
+                  ${user.suspended ? '<span class="tag suspended">заблокирован</span>' : ''}
+                </div>
               </div>
+            </div>
+            <div>
+              <div class="label" style="margin-bottom:8px">Аватар</div>
+              <div class="row wrap" style="gap:6px">
+                ${['#262626', '#404040', '#595959', '#737373', '#8c8c8c', '#a6a6a6', '#ffffff'].map((c) => `<button type="button" class="icon-btn" data-avatar-color="${c}" title="${c}" style="width:26px;height:26px;border-radius:3px;background:${c};border:2px solid ${user.avatarColor === c ? '#fff' : 'transparent'}"></button>`).join('')}
+              </div>
+              <div class="row wrap" style="gap:8px;margin-top:10px">
+                <label class="btn sm" for="avatar-file" style="cursor:pointer">${icon('image', 13)} Загрузить картинку</label>
+                <input type="file" id="avatar-file" accept="image/*" hidden />
+                ${user.avatarImage ? '<button class="btn sm ghost danger" type="button" id="avatar-remove">Убрать картинку</button>' : ''}
+              </div>
+              <div class="hint" style="margin-top:6px">Картинка до 2 МБ. Без картинки — цветной квадрат с инициалами.</div>
             </div>
           </div>
         </div>
@@ -1130,6 +1153,33 @@ export async function profileView(ctx) {
   return {
     html,
     mount(root) {
+      root.querySelectorAll('[data-avatar-color]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          try {
+            await api.patch('/api/auth/me', { avatarColor: btn.dataset.avatarColor, avatarImage: null });
+            toast('Цвет аватара обновлён', '', 'ok');
+            ctx.refresh();
+          } catch (err) { toast('Ошибка', err.message, 'err'); }
+        });
+      });
+      const avatarFile = root.querySelector('#avatar-file');
+      if (avatarFile) avatarFile.addEventListener('change', async () => {
+        try {
+          const dataUrl = await fileToDataUrl(avatarFile.files[0]);
+          await api.patch('/api/auth/me', { avatarImage: dataUrl });
+          toast('Аватар обновлён', '', 'ok');
+          ctx.refresh();
+        } catch (err) { toast('Ошибка', err.message, 'err'); }
+      });
+      const avatarRemove = root.querySelector('#avatar-remove');
+      if (avatarRemove) avatarRemove.addEventListener('click', async () => {
+        try {
+          await api.patch('/api/auth/me', { avatarImage: null });
+          toast('Картинка убрана', '', 'ok');
+          ctx.refresh();
+        } catch (err) { toast('Ошибка', err.message, 'err'); }
+      });
+
       root.querySelector('#profile-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         try {

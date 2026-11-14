@@ -68,7 +68,23 @@ export function loginView(ctx) {
           <button class="btn primary" type="submit">${icon('users', 15)} Создать аккаунт</button>
         </form>
 
-        ${meta.registrationOpen ? `<div class="auth-alt">Нет аккаунта? <a href="#" id="switch-mode">Зарегистрироваться</a></div>` : `<div class="auth-alt">Регистрация закрыта — аккаунт выдаёт администратор.</div>`}
+        <form class="auth-form hidden" id="recover-form">
+          <div class="field">
+            <label for="rec-email">E-mail, привязанный к аккаунту</label>
+            <input class="input" id="rec-email" name="email" type="email" placeholder="you@example.com" autocomplete="email" required />
+          </div>
+          <div class="field">
+            <label for="rec-password">Новый пароль</label>
+            <input class="input" id="rec-password" name="password" type="password" placeholder="минимум 8 символов" autocomplete="new-password" required />
+          </div>
+          <button class="btn primary" type="submit">${icon('key', 15)} Сбросить пароль</button>
+          <div class="hint">Восстановление — по привязанному e-mail: введите его и новый пароль.</div>
+        </form>
+
+        <div class="auth-alt">
+          ${meta.registrationOpen ? `Нет аккаунта? <a href="#" id="switch-mode">Зарегистрироваться</a> · ` : `Регистрация закрыта — аккаунт выдаёт администратор. · `}
+          <a href="#" id="switch-recover">Забыли пароль?</a>
+        </div>
 
 
       </div>
@@ -78,6 +94,7 @@ export function loginView(ctx) {
   function mount(root) {
     const loginForm = root.querySelector('#login-form');
     const registerForm = root.querySelector('#register-form');
+    const recoverForm = root.querySelector('#recover-form');
     const title = root.querySelector('#auth-title');
     const sub = root.querySelector('#auth-sub');
     const error = root.querySelector('#auth-error');
@@ -89,17 +106,31 @@ export function loginView(ctx) {
       setTimeout(() => error.classList.remove('show'), 5000);
     };
 
+    const setMode = (next) => {
+      mode = next;
+      loginForm.classList.toggle('hidden', next !== 'login');
+      registerForm.classList.toggle('hidden', next !== 'register');
+      recoverForm.classList.toggle('hidden', next !== 'recover');
+      title.textContent = next === 'register' ? 'Создание аккаунта' : next === 'recover' ? 'Восстановление пароля' : 'Вход в панель';
+      sub.textContent = next === 'register'
+        ? 'Логин, e-mail и пароль. Доступы к серверам выдаёт администратор.'
+        : next === 'recover'
+          ? 'Укажите e-mail, привязанный к аккаунту, и новый пароль.'
+          : 'Введите логин и пароль, выданные администратором.';
+    };
+
     const switchMode = root.querySelector('#switch-mode');
     if (switchMode) {
       switchMode.addEventListener('click', (e) => {
         e.preventDefault();
-        mode = mode === 'login' ? 'register' : 'login';
-        const isRegister = mode === 'register';
-        loginForm.classList.toggle('hidden', isRegister);
-        registerForm.classList.toggle('hidden', !isRegister);
-        title.textContent = isRegister ? 'Создание аккаунта' : 'Вход в панель';
-        sub.textContent = isRegister ? 'Логин, e-mail и пароль. Доступы к серверам выдаёт администратор.' : 'Введите логин и пароль, выданные администратором.';
-        switchMode.textContent = isRegister ? 'У меня уже есть аккаунт' : 'Зарегистрироваться';
+        setMode(mode === 'register' ? 'login' : 'register');
+      });
+    }
+    const switchRecover = root.querySelector('#switch-recover');
+    if (switchRecover) {
+      switchRecover.addEventListener('click', (e) => {
+        e.preventDefault();
+        setMode(mode === 'recover' ? 'login' : 'recover');
       });
     }
 
@@ -116,6 +147,20 @@ export function loginView(ctx) {
       } catch (err) {
         showError(err.message);
         btn.disabled = false;
+      }
+    });
+
+    recoverForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await api.post('/api/auth/recover', {
+          email: recoverForm.email.value.trim(),
+          password: recoverForm.password.value,
+        });
+        toast('Пароль сброшен', 'Теперь войдите с новым паролем', 'ok');
+        setMode('login');
+      } catch (err) {
+        showError(err.message);
       }
     });
 

@@ -155,11 +155,13 @@ export function startupTab(ctx, data) {
               <input class="input mono" name="env_${esc(v.env)}" value="${esc(env[v.env] !== undefined ? env[v.env] : v.default || '')}" ${v.userEditable === false && !server.isAdmin ? 'disabled' : ''} />
               ${v.rules && v.rules !== 'string' ? `<span class="hint">правило: ${esc(v.rules)}</span>` : ''}
             </div>`).join('') : `<div class="notice">${icon('info', 16)}<div>У этого шаблона нет переменных. Стартовую команду можно изменить ниже.</div></div>`}
+          ${server.isAdmin ? `
           <div class="field">
             <label>Стартовая команда <span class="dim">— переопределение</span></label>
             <textarea class="textarea mono" name="startupOverride" rows="3" placeholder="${esc(egg.startup || '')}">${esc(server.startupOverride || '')}</textarea>
             <span class="hint">Оставьте пустым, чтобы использовать команду шаблона. Поддерживаются <span class="mono">{{PORT}}</span>, <span class="mono">{{MEMORY}}</span>, <span class="mono">{{SERVER_DIR}}</span>.</span>
-          </div>
+          </div>` : `
+          <div class="notice">${icon('lock', 16)}<div>Стартовую команду могут менять только администраторы. Переменные выше — ваши.</div></div>`}
           <div class="row">
             <button class="btn primary" type="submit">${icon('save', 14)} Сохранить переменные</button>
             <span class="hint">Изменения применятся при следующем запуске.</span>
@@ -206,10 +208,9 @@ export function startupTab(ctx, data) {
           if (k.startsWith('env_')) environment[k.slice(4)] = v;
         });
         try {
-          await api.post(`/api/servers/${server.id}/startup`, {
-            environment,
-            startupOverride: raw.startupOverride || null,
-          });
+          const payload = { environment };
+          if (server.isAdmin) payload.startupOverride = raw.startupOverride || null;
+          await api.post(`/api/servers/${server.id}/startup`, payload);
           toast('Переменные сохранены', 'Применятся при следующем запуске', 'ok');
           ctx.refresh();
         } catch (err) { toast('Ошибка', err.message, 'err'); }
@@ -553,6 +554,33 @@ export async function settingsTab(ctx, data) {
   return {
     html,
     mount(root) {
+      root.querySelectorAll('[data-server-color]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          try {
+            await api.patch(`/api/servers/${server.id}`, { avatarColor: btn.dataset.serverColor, avatarImage: null });
+            toast('Цвет иконки обновлён', '', 'ok');
+            ctx.refresh();
+          } catch (err) { toast('Ошибка', err.message, 'err'); }
+        });
+      });
+      const serverAvatarFile = root.querySelector('#server-avatar-file');
+      if (serverAvatarFile) serverAvatarFile.addEventListener('change', async () => {
+        try {
+          const dataUrl = await fileToDataUrl(serverAvatarFile.files[0]);
+          await api.patch(`/api/servers/${server.id}`, { avatarImage: dataUrl });
+          toast('Иконка сервера обновлена', '', 'ok');
+          ctx.refresh();
+        } catch (err) { toast('Ошибка', err.message, 'err'); }
+      });
+      const serverAvatarRemove = root.querySelector('#server-avatar-remove');
+      if (serverAvatarRemove) serverAvatarRemove.addEventListener('click', async () => {
+        try {
+          await api.patch(`/api/servers/${server.id}`, { avatarImage: null });
+          toast('Картинка убрана', '', 'ok');
+          ctx.refresh();
+        } catch (err) { toast('Ошибка', err.message, 'err'); }
+      });
+
       const general = root.querySelector('#general-form');
       general.addEventListener('submit', async (e) => {
         e.preventDefault();

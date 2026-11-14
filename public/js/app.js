@@ -149,6 +149,9 @@ function startApp() {
           <div class="brand-sub">control plane</div>
         </div>
       </div>
+      <div class="sidebar-actions">
+        <button class="side-action" id="logout-btn" title="Выйти из панели">${icon('logout', 15)}<span>Выйти</span></button>
+      </div>
       <nav class="nav" id="nav"></nav>
       <div class="sidebar-foot">
         <div class="version-chip" id="version-chip">
@@ -191,6 +194,7 @@ function startApp() {
   document.getElementById('nav').addEventListener('click', () => document.body.classList.remove('nav-open'));
   document.getElementById('search-open').addEventListener('click', openPalette);
   document.getElementById('user-card').addEventListener('click', () => { location.hash = '#/profile'; });
+  document.getElementById('logout-btn').addEventListener('click', () => logout());
   document.getElementById('profile-link').addEventListener('click', (e) => { e.preventDefault(); location.hash = '#/profile'; });
 
   if (!location.hash) location.hash = '#/';

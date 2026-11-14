@@ -198,6 +198,7 @@ function publicUser(u) {
     lastLoginAt: u.lastLoginAt || null,
     limits: u.limits,
     avatarColor: u.avatarColor || '#262626',
+    avatarImage: u.avatarImage || null,
   };
 }
 

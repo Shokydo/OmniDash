@@ -88,6 +88,8 @@ export const statusPill = (status) => {
 
 export const avatar = (user, size = '') => {
   const name = (user && (user.username || user.name)) || '?';
+  const img = user && user.avatarImage;
+  if (img) return `<span class="avatar ${size} has-img"><img src="${esc(img)}" alt="" /></span>`;
   return `<span class="avatar ${size}">${esc(name.slice(0, 2))}</span>`;
 };
 
@@ -332,7 +334,18 @@ export const expiryChip = (days) => {
   return `<span class="chip expiry-chip ${tone}" title="Срок аренды">${icon('calendar', 12)}<span>${days < 0 ? `просрочен` : `осталось ${days} дн`}</span></span>`;
 };
 
+export const fileToDataUrl = (file, maxBytes = 2 * 1024 * 1024) => new Promise((resolve, reject) => {
+  if (!file) return reject(new Error('Файл не выбран'));
+  if (file.size > maxBytes) return reject(new Error(`Файл слишком большой (макс. ${Math.round(maxBytes / 1024 / 1024)} МБ)`));
+  const reader = new FileReader();
+  reader.onload = () => resolve(reader.result);
+  reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
+  reader.readAsDataURL(file);
+});
+
 export const serverIcon = (server, cls = '') => {
+  const img = server && server.avatarImage;
+  if (img) return `<span class="server-icon has-img ${cls}"><img src="${esc(img)}" alt="" /></span>`;
   return `<span class="server-icon ${cls}">${icon('server', 19)}</span>`;
 };
 

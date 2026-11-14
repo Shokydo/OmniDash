@@ -60,6 +60,7 @@ const P = {
   up: '<path d="m18 15-6-6-6 6"/>',
   down: '<path d="M6 9l6 6 6-6"/>',
   arrowLeft: '<path d="m12 19-7-7 7-7M19 12H5"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
   filter: '<path d="M22 3H2l8 9.5V19l4 2v-8.5L22 3Z"/>',
   link: '<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1.5-1.5"/>',
   wifi: '<path d="M5 12.6a10 10 0 0 1 14 0M8.5 16a5.5 5.5 0 0 1 7 0M2 9a15 15 0 0 1 20 0M12 20h.01"/>',
@@ -96,7 +97,5 @@ export function icon(name, size = 16, cls = '') {
 }
 
 export function logoMark(size = 19) {
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="square" stroke-linejoin="miter">
-    <rect x="3" y="3" width="18" height="18" rx="1"/><rect x="8" y="8" width="8" height="8" rx="0" fill="currentColor" stroke="none"/>
-  </svg>`;
+  return `<img src="/anime.jpg" width="${size}" height="${size}" alt="OmniDash" style="width:${size}px;height:${size}px;border-radius:3px;object-fit:cover;display:block" />`;
 }

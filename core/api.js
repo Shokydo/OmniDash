@@ -22,6 +22,7 @@ const { makeTask, ACTIONS } = require('./scheduler');
 const STATUSES = daemonCore.STATUS;
 const loginLimiter = createLimiter(10, 5 * 60000);
 const registerLimiter = createLimiter(6, 60 * 60000);
+const recoverLimiter = createLimiter(6, 60 * 60000);
 
 class HttpError extends Error {
   constructor(status, message, code) {
@@ -125,7 +126,9 @@ function serverJson(server, user, daemon) {
     status: server.suspended ? STATUSES.SUSPENDED : (state ? state.status : STATUSES.OFFLINE),
     suspended: !!server.suspended,
     suspendReason: server.suspendReason || null,
-    owner: owner ? { id: owner.id, username: owner.username, avatarColor: owner.avatarColor } : null,
+    owner: owner ? { id: owner.id, username: owner.username, avatarColor: owner.avatarColor, avatarImage: owner.avatarImage || null } : null,
+    avatarColor: server.avatarColor || null,
+    avatarImage: server.avatarImage || null,
     node: node ? { id: node.id, name: node.name, location: node.location, flag: node.flag, status: node.status } : null,
     egg: egg ? { id: egg.id, name: egg.name, color: egg.color, category: egg.category } : null,
     allocation: primary ? { id: primary.id, ip: primary.ip, port: primary.port, label: `${primary.ip}:${primary.port}` } : null,
@@ -154,7 +157,7 @@ function serverJson(server, user, daemon) {
     autoStart: !!server.autoStart,
     subusers: (server.subusers || []).map((s) => {
       const u = db.userById(s.userId);
-      return u ? { id: u.id, username: u.username, perms: s.perms, avatarColor: u.avatarColor } : null;
+      return u ? { id: u.id, username: u.username, perms: s.perms, avatarColor: u.avatarColor, avatarImage: u.avatarImage || null } : null;
     }).filter(Boolean),
     tasks: (server.tasks || []).length,
     backups: ownerBackups,
@@ -440,18 +443,44 @@ function createApi(deps) {
     if (!limit.ok) throw new HttpError(429, 'Слишком много регистраций, попробуйте позже', 'RATE_LIMIT');
     const { username, email, password } = ctx.body || {};
     const name = String(username || '').trim();
+    const mail = String(email || '').trim().toLowerCase();
     if (!/^[a-zA-Z0-9_.-]{3,24}$/.test(name)) throw bad('Логин: 3–24 символа, латиница, цифры, _ . -');
     if (db.userByName(name)) throw conflict('Такой логин уже занят');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) throw bad('Укажите корректный e-mail — он привязывается к аккаунту для восстановления пароля');
+    if (db.data.users.some((u) => String(u.email || '').toLowerCase() === mail)) throw conflict('Этот e-mail уже привязан к другому аккаунту');
     if (String(password || '').length < 8) throw bad('Пароль минимум 8 символов');
     const user = db.newUser({
       username: name,
-      email: String(email || '').slice(0, 120),
+      email: mail,
       role: 'user',
       ...auth.hashPassword(String(password)),
     });
     db.audit({ action: 'user.register', actorId: user.id, actorName: user.username, meta: sessionMeta(ctx.req) });
     const { sid, ttl } = auth.createSession(user, ctx.req);
     return { user: publicUser(user), cookie: auth.cookieHeader(sid, Math.floor(ttl / 1000)) };
+  }, { public: true });
+
+  route('POST', '/api/auth/recover', async (ctx) => {
+    const limit = recoverLimiter(ctx.req.ip);
+    if (!limit.ok) throw new HttpError(429, 'Слишком много попыток, попробуйте позже', 'RATE_LIMIT');
+    const { email, password } = ctx.body || {};
+    const mail = String(email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) throw bad('Укажите корректный e-mail');
+    if (String(password || '').length < 8) throw bad('Новый пароль минимум 8 символов');
+    const user = db.data.users.find((u) => String(u.email || '').toLowerCase() === mail);
+    if (!user) throw notFound('Аккаунт с таким e-mail не найден');
+    if (user.suspended) throw new HttpError(403, 'Аккаунт заблокирован администратором', 'SUSPENDED');
+    const hashed = auth.hashPassword(String(password));
+    user.salt = hashed.salt;
+    user.passwordHash = hashed.hash;
+    user.forcePasswordChange = false;
+    // разлогиниваем все сессии пользователя
+    for (const [sid, s] of Object.entries(db.data.sessions)) {
+      if (s.userId === user.id) delete db.data.sessions[sid];
+    }
+    db.save();
+    db.audit({ action: 'auth.password.recover', actorId: user.id, actorName: user.username, meta: sessionMeta(ctx.req) });
+    return { recovered: true };
   }, { public: true });
 
   route('POST', '/api/auth/logout', (ctx) => {
@@ -474,10 +503,13 @@ function createApi(deps) {
     const body = ctx.body || {};
     if (body.email !== undefined) ctx.user.email = String(body.email).slice(0, 120);
     if (body.avatarColor) ctx.user.avatarColor = String(body.avatarColor).slice(0, 20);
+    if (body.avatarImage !== undefined) ctx.user.avatarImage = body.avatarImage ? String(body.avatarImage).slice(0, 300000) : null;
     if (body.currentPassword || body.newPassword) {
       if (!auth.verifyPassword(String(body.currentPassword || ''), ctx.user)) throw bad('Текущий пароль неверен');
       if (String(body.newPassword || '').length < 8) throw bad('Новый пароль минимум 8 символов');
-      Object.assign(ctx.user, auth.hashPassword(String(body.newPassword)));
+      const hashed = auth.hashPassword(String(body.newPassword));
+      ctx.user.salt = hashed.salt;
+      ctx.user.passwordHash = hashed.hash;
       // разлогиниваем остальные сессии
       for (const [sid, s] of Object.entries(db.data.sessions)) {
         if (s.userId === ctx.user.id && sid !== ctx.sid) delete db.data.sessions[sid];
@@ -646,6 +678,8 @@ function createApi(deps) {
       server.name = name;
     }
     if (body.description !== undefined) server.description = String(body.description).slice(0, 500);
+    if (body.avatarImage !== undefined) server.avatarImage = body.avatarImage ? String(body.avatarImage).slice(0, 300000) : null;
+    if (body.avatarColor !== undefined) server.avatarColor = body.avatarColor ? String(body.avatarColor).slice(0, 20) : null;
     if (body.autoStart !== undefined) server.autoStart = !!body.autoStart;
     if (body.notes !== undefined) server.notes = String(body.notes).slice(0, 2000);
     if (body.limits && isAdmin) {
@@ -934,6 +968,7 @@ function createApi(deps) {
       server.environment = { ...(server.environment || {}), ...env };
     }
     if (body.startupOverride !== undefined) {
+      if (!auth.isAdmin(ctx.user)) throw forbidden('Стартовую команду могут менять только администраторы');
       server.startupOverride = body.startupOverride ? String(body.startupOverride).slice(0, 800) : null;
     }
     db.save();
@@ -948,6 +983,52 @@ function createApi(deps) {
     permit(ctx.user, server, 'files');
     const listing = filesCore.list(server, String(ctx.query.path || ''));
     return { ...listing, usage: { used: daemon.diskOf(server.id), limit: int(server.limits.disk) * 1024 * 1024 } };
+  });
+
+  route('GET', '/api/servers/:id/files/tree', (ctx) => {
+    const server = db.serverById(ctx.params.id);
+    if (!server) throw notFound();
+    permit(ctx.user, server, 'files');
+    return filesCore.tree(server);
+  });
+
+  route('GET', '/api/servers/:id/files/search', (ctx) => {
+    const server = db.serverById(ctx.params.id);
+    if (!server) throw notFound();
+    permit(ctx.user, server, 'files');
+    return filesCore.search(server, String(ctx.query.q || ''));
+  });
+
+  route('GET', '/api/servers/:id/files/image', (ctx) => {
+    const server = db.serverById(ctx.params.id);
+    if (!server) throw notFound();
+    permit(ctx.user, server, 'files');
+    return filesCore.readImage(server, String(ctx.query.path || ''));
+  });
+
+  route('GET', '/api/servers/:id/files/props', (ctx) => {
+    const server = db.serverById(ctx.params.id);
+    if (!server) throw notFound();
+    permit(ctx.user, server, 'files');
+    return filesCore.readProps(server);
+  });
+
+  route('PUT', '/api/servers/:id/files/props', (ctx) => {
+    const server = db.serverById(ctx.params.id);
+    if (!server) throw notFound();
+    permit(ctx.user, server, 'files');
+    const result = filesCore.writeProps(server, (ctx.body || {}).props || {});
+    db.audit({ action: 'file.props.write', actorId: ctx.user.id, actorName: ctx.user.username, target: server.name });
+    return result;
+  });
+
+  route('POST', '/api/servers/:id/files/move', (ctx) => {
+    const server = db.serverById(ctx.params.id);
+    if (!server) throw notFound();
+    permit(ctx.user, server, 'files');
+    const body = ctx.body || {};
+    if (!body.path || !body.dest) throw bad('Не указаны путь и назначение');
+    return filesCore.move(server, String(body.path), String(body.dest));
   });
 
   route('GET', '/api/servers/:id/files/content', (ctx) => {

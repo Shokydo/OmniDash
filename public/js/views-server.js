@@ -481,29 +481,50 @@ async function filesTab(ctx, data) {
   const rootListing = await api.get(`/api/servers/${server.id}/files`, { path: '' });
   let state = { path: '', entries: rootListing.entries, usage: rootListing.usage };
   let selection = new Set();
+  let treeEntries = [];
+  let searchResults = null;
+  let searchQuery = '';
+  try {
+    const treeRes = await api.get(`/api/servers/${server.id}/files/tree`);
+    treeEntries = treeRes.entries || [];
+  } catch { treeEntries = []; }
 
   const html = `
-  <div class="card">
-    <div class="files-bar">
-      <div class="breadcrumbs" id="crumbs"></div>
-      <div class="right row" style="gap:6px;margin-left:auto">
-        <button class="btn sm" data-f="mkdir">${icon('folder', 13)} Папка</button>
-        <button class="btn sm" data-f="touch">${icon('file', 13)} Файл</button>
-        <button class="btn sm" data-f="upload">${icon('upload', 13)} Загрузить</button>
-        <button class="btn sm ghost" data-f="refresh">${icon('refresh', 13)}</button>
+  <div class="files-layout">
+    <aside class="card files-tree-card">
+      <div class="files-tree-head">
+        <span class="panel-title">${icon('folder', 14)} Дерево файлов</span>
+        <span class="chip" id="tree-count">${treeEntries.length}</span>
       </div>
-    </div>
-    <div class="files-bar" style="padding-top:8px;padding-bottom:8px">
-      <span class="tiny dim" id="files-meta"></span>
-      <div class="file-toolbar right" style="margin-left:auto">
-        <button class="btn sm ghost" data-f="archive" disabled>${icon('archive', 13)} В zip</button>
-        <button class="btn sm ghost danger" data-f="delete" disabled>${icon('trash', 13)} Удалить</button>
+      <div class="files-tree" id="files-tree"></div>
+    </aside>
+    <div class="card files-main">
+      <div class="files-bar">
+        <div class="breadcrumbs" id="crumbs"></div>
+        <div class="right row" style="gap:6px;margin-left:auto">
+          <button class="btn sm" data-f="mkdir">${icon('folder', 13)} Папка</button>
+          <button class="btn sm" data-f="touch">${icon('file', 13)} Файл</button>
+          <button class="btn sm" data-f="upload">${icon('upload', 13)} Загрузить</button>
+          <button class="btn sm ghost" data-f="refresh">${icon('refresh', 13)}</button>
+        </div>
       </div>
-    </div>
-    <div id="files-host"></div>
-    <div class="row tiny dim" style="padding:10px 14px;border-top:1px solid var(--line);gap:14px">
-      <span id="files-usage"></span>
-      <span class="right">двойной клик по папке — переход · по файлу — редактор</span>
+      <div class="files-bar" style="padding-top:8px;padding-bottom:8px">
+        <div class="search-box">
+          ${icon('search', 13)}
+          <input class="input" id="files-search" placeholder="Поиск по имени…" autocomplete="off" />
+          <button class="btn sm ghost hidden" id="files-search-clear" title="Сбросить">${icon('x', 12)}</button>
+        </div>
+        <span class="tiny dim" id="files-meta"></span>
+        <div class="file-toolbar right" style="margin-left:auto">
+          <button class="btn sm ghost" data-f="archive" disabled>${icon('archive', 13)} В zip</button>
+          <button class="btn sm ghost danger" data-f="delete" disabled>${icon('trash', 13)} Удалить</button>
+        </div>
+      </div>
+      <div id="files-host"></div>
+      <div class="row tiny dim" style="padding:10px 14px;border-top:1px solid var(--line);gap:14px">
+        <span id="files-usage"></span>
+        <span class="right">двойной клик по папке — переход · по файлу — редактор</span>
+      </div>
     </div>
   </div>
   <input type="file" id="file-upload" multiple class="hidden" />`;
@@ -540,14 +561,62 @@ async function filesTab(ctx, data) {
     });
   }
 
+  function renderTree() {
+    const treeEl = document.getElementById('files-tree');
+    if (!treeEl) return;
+    const countEl = document.getElementById('tree-count');
+    if (countEl) countEl.textContent = String(treeEntries.length);
+    if (!treeEntries.length) {
+      treeEl.innerHTML = '<div class="tiny dim" style="padding:10px">Пусто</div>';
+      return;
+    }
+    treeEl.innerHTML = treeEntries.map((e) => `
+      <div class="tree-row ${e.dir ? 'dir' : ''} ${state.path === e.path ? 'active' : ''}" data-tree="${esc(e.path)}" data-dir="${e.dir ? '1' : ''}" style="padding-left:${8 + e.depth * 14}px" title="${esc(e.path)}">
+        ${icon(e.dir ? 'folder' : 'file', 12)}<span class="ellipsis">${esc(e.name)}</span>
+      </div>`).join('');
+    treeEl.querySelectorAll('[data-tree]').forEach((el) => {
+      el.addEventListener('click', () => {
+        if (el.dataset.dir) load(el.dataset.tree);
+        else openEditor(el.dataset.tree);
+      });
+    });
+  }
+
   function render() {
     const crumbs = document.getElementById('crumbs');
     const host = document.getElementById('files-host');
     if (!crumbs || !host) return;
+    renderTree();
     const parts = state.path ? state.path.split('/') : [];
     crumbs.innerHTML = `<button data-crumb="">${icon('harddrive', 12)} корень</button>` + parts.map((part, i) => `
       <span class="sep">/</span><button data-crumb="${esc(parts.slice(0, i + 1).join('/'))}">${esc(part)}</button>`).join('');
-    crumbs.querySelectorAll('[data-crumb]').forEach((b) => b.addEventListener('click', () => load(b.dataset.crumb)));
+    crumbs.querySelectorAll('[data-crumb]').forEach((b) => b.addEventListener('click', () => { searchResults = null; load(b.dataset.crumb); }));
+
+    if (searchResults) {
+      host.innerHTML = searchResults.length ? searchResults.map((f) => `
+        <div class="file-row ${f.dir ? 'dir' : ''}" ${f.dir ? `data-dir="${esc(f.path)}"` : `data-file="${esc(f.path)}"`}>
+          <span style="width:16px;flex:none"></span>
+          <div class="fname">
+            ${icon(f.dir ? 'folder' : 'file', 15)}
+            <span class="ellipsis">${esc(f.path)}</span>
+          </div>
+          <span class="fsize"></span>
+          <span class="fdate"></span>
+          <div class="facts">
+            ${!f.dir ? `<button class="icon-btn" data-act="edit" data-path="${esc(f.path)}" title="Редактировать">${icon('edit', 14)}</button>` : ''}
+            ${!f.dir ? `<button class="icon-btn" data-act="download" data-path="${esc(f.path)}" title="Скачать">${icon('download', 14)}</button>` : ''}
+            <button class="icon-btn" data-act="rename" data-path="${esc(f.path)}" title="Переименовать">${icon('pencil', 14)}</button>
+            <button class="icon-btn" data-act="delete" data-path="${esc(f.path)}" title="Удалить">${icon('trash', 14)}</button>
+          </div>
+        </div>`).join('') : emptyState('search', 'Ничего не найдено', `По запросу «${esc(searchQuery)}» файлов нет.`);
+      selection = new Set();
+      const meta = document.getElementById('files-meta');
+      if (meta) meta.textContent = `поиск: ${searchResults.length} · «${searchQuery}»`;
+      document.querySelectorAll('[data-f="archive"], [data-f="delete"]').forEach((b) => { b.disabled = true; });
+      bindRows(host);
+      host.querySelectorAll('[data-f]').forEach((b) => b.addEventListener('click', () => fileAction(b.dataset.f)));
+      return;
+    }
 
     if (!state.entries.length) {
       host.innerHTML = emptyState('folder', 'Пусто', 'Здесь пока нет файлов. Загрузите файл или создайте папку.', `<button class="btn sm" data-f="upload">${icon('upload', 13)} Загрузить</button>`);
@@ -593,7 +662,75 @@ async function filesTab(ctx, data) {
     }
   }
 
+  async function refreshTree() {
+    try {
+      const treeRes = await api.get(`/api/servers/${server.id}/files/tree`);
+      treeEntries = treeRes.entries || [];
+      renderTree();
+    } catch { /* ignore */ }
+  }
+
+  let searchTimer = null;
+  function bindSearch() {
+    const input = document.getElementById('files-search');
+    const clear = document.getElementById('files-search-clear');
+    if (!input) return;
+    input.addEventListener('input', () => {
+      searchQuery = input.value.trim();
+      clear.classList.toggle('hidden', !searchQuery);
+      clearTimeout(searchTimer);
+      if (!searchQuery) {
+        searchResults = null;
+        render();
+        return;
+      }
+      searchTimer = setTimeout(async () => {
+        try {
+          const res = await api.get(`/api/servers/${server.id}/files/search`, { q: searchQuery });
+          searchResults = res.results || [];
+          render();
+        } catch (err) {
+          toast('Ошибка поиска', err.message, 'err');
+        }
+      }, 250);
+    });
+    if (clear) clear.addEventListener('click', () => {
+      input.value = '';
+      searchQuery = '';
+      searchResults = null;
+      clear.classList.add('hidden');
+      render();
+      input.focus();
+    });
+  }
+
   async function openEditor(path) {
+    const name = path.split('/').pop();
+    // картинки — превью
+    if (/\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(name)) {
+      try {
+        const img = await api.get(`/api/servers/${server.id}/files/image`, { path });
+        modal({
+          title: name,
+          subtitle: `${path} · ${fmtBytes(img.size)}`,
+          body: `<div style="display:grid;place-items:center;background:#000;border:1px solid var(--line);border-radius:3px;padding:10px;max-height:60vh;overflow:auto"><img src="${img.dataUrl}" alt="" style="max-width:100%;max-height:56vh;object-fit:contain" /></div>`,
+          footer: `<button class="btn" data-close>Закрыть</button><button class="btn" id="img-download">${icon('download', 14)} Скачать</button>`,
+          onMount: (overlay) => {
+            overlay.querySelector('#img-download').addEventListener('click', () => {
+              api.download(`/api/servers/${server.id}/files/download?path=${encodeURIComponent(path)}`, name).catch((err) => toast('Ошибка', err.message, 'err'));
+            });
+          },
+        });
+      } catch (err) {
+        toast('Не удалось открыть картинку', err.message, 'err');
+      }
+      return;
+    }
+    // server.properties — редактор свойств
+    if (name === 'server.properties') {
+      openPropsEditor(path);
+      return;
+    }
     let file;
     try {
       file = await api.get(`/api/servers/${server.id}/files/content`, { path });
@@ -671,6 +808,80 @@ async function filesTab(ctx, data) {
     return close;
   }
 
+  async function openPropsEditor(path) {
+    let data;
+    try {
+      data = await api.get(`/api/servers/${server.id}/files/props`);
+    } catch (err) {
+      toast('Не удалось открыть server.properties', err.message, 'err');
+      return;
+    }
+    const props = data.props || {};
+    const keys = Object.keys(props);
+    modal({
+      title: 'server.properties',
+      subtitle: data.exists ? `${keys.length} свойств · сохраните, чтобы применить` : 'Файл ещё не создан — заполните свойства и сохраните',
+      wide: true,
+      body: `
+        <div class="stack">
+          <div class="row" style="gap:8px">
+            <input class="input mono" id="prop-key" placeholder="ключ" style="flex:1" />
+            <input class="input mono" id="prop-value" placeholder="значение" style="flex:1" />
+            <button class="btn sm" id="prop-add">${icon('plus', 13)} Добавить</button>
+          </div>
+          <div id="props-list" class="stack" style="gap:6px;max-height:46vh;overflow:auto">
+            ${keys.length ? keys.map((k) => `
+              <div class="row prop-row" style="gap:8px">
+                <span class="mono small" style="width:180px;flex:none">${esc(k)}</span>
+                <input class="input mono" data-prop="${esc(k)}" value="${esc(props[k])}" style="flex:1" />
+                <button class="btn sm ghost danger" data-prop-del="${esc(k)}" title="Удалить">${icon('trash', 13)}</button>
+              </div>`).join('') : '<div class="tiny dim">Свойств нет.</div>'}
+          </div>
+          <div class="hint">Значения с не-ASCII символами экранируются как \\uXXXX (как в OmniPanel).</div>
+        </div>`,
+      footer: `<button class="btn" data-close>Закрыть</button><button class="btn primary" id="props-save">${icon('save', 14)} Сохранить</button>`,
+      onMount: (overlay, close) => {
+        const list = overlay.querySelector('#props-list');
+        const addRow = (key, value) => {
+          const empty = list.querySelector('.tiny.dim');
+          if (empty) empty.remove();
+          const row = document.createElement('div');
+          row.className = 'row prop-row';
+          row.style.gap = '8px';
+          row.innerHTML = `<span class="mono small" style="width:180px;flex:none">${esc(key)}</span><input class="input mono" data-prop="${esc(key)}" value="${esc(value)}" style="flex:1" /><button class="btn sm ghost danger" data-prop-del="${esc(key)}" title="Удалить">${icon('trash', 13)}</button>`;
+          list.appendChild(row);
+          row.querySelector('[data-prop-del]').addEventListener('click', () => row.remove());
+        };
+        overlay.querySelector('#prop-add').addEventListener('click', () => {
+          const k = overlay.querySelector('#prop-key').value.trim();
+          const v = overlay.querySelector('#prop-value').value;
+          if (!k) return;
+          addRow(k, v);
+          overlay.querySelector('#prop-key').value = '';
+          overlay.querySelector('#prop-value').value = '';
+        });
+        list.querySelectorAll('[data-prop-del]').forEach((btn) => {
+          btn.addEventListener('click', () => btn.closest('.prop-row').remove());
+        });
+        overlay.querySelector('#props-save').addEventListener('click', async () => {
+          const out = {};
+          list.querySelectorAll('[data-prop]').forEach((input) => {
+            out[input.dataset.prop] = input.value;
+          });
+          try {
+            await api.put(`/api/servers/${server.id}/files/props`, { props: out });
+            toast('server.properties сохранён', `${Object.keys(out).length} свойств`, 'ok');
+            close();
+            load(state.path);
+            refreshTree();
+          } catch (err) {
+            toast('Ошибка', err.message, 'err');
+          }
+        });
+      },
+    });
+  }
+
   function renameEntry(path) {
     modal({
       title: 'Переименовать',
@@ -687,6 +898,7 @@ async function filesTab(ctx, data) {
             await api.post(`/api/servers/${server.id}/files/rename`, { path, name: input.value });
             close();
             load(state.path);
+            refreshTree();
           } catch (err) { toast('Ошибка', err.message, 'err'); }
         };
         overlay.querySelector('#rename-ok').addEventListener('click', go);
@@ -707,6 +919,7 @@ async function filesTab(ctx, data) {
       const res = await api.post(`/api/servers/${server.id}/files/delete`, { paths });
       toast('Удалено', `${res.removed.length} объектов`, 'ok');
       load(state.path);
+      refreshTree();
     } catch (err) { toast('Ошибка', err.message, 'err'); }
   }
 
@@ -715,6 +928,7 @@ async function filesTab(ctx, data) {
       const res = await api.post(`/api/servers/${server.id}/files/extract`, { path });
       toast('Распаковано', `${res.files} файлов → ${res.path}`, 'ok');
       load(state.path);
+      refreshTree();
     } catch (err) { toast('Ошибка распаковки', err.message, 'err'); }
   }
 
@@ -743,6 +957,7 @@ async function filesTab(ctx, data) {
               else await api.post(`/api/servers/${server.id}/files/touch`, { path: state.path, name: input.value.trim() });
               close();
               load(state.path);
+              refreshTree();
             } catch (err) { toast('Ошибка', err.message, 'err'); }
           };
           overlay.querySelector('#new-ok').addEventListener('click', go);
@@ -757,6 +972,7 @@ async function filesTab(ctx, data) {
         const res = await api.post(`/api/servers/${server.id}/files/archive`, { paths: [...selection] });
         toast('Архив создан', `${res.path} · ${fmtBytes(res.size)}`, 'ok');
         load(state.path);
+        refreshTree();
       } catch (err) { toast('Ошибка', err.message, 'err'); }
       return;
     }
@@ -769,6 +985,7 @@ async function filesTab(ctx, data) {
     html,
     mount() {
       render();
+      bindSearch();
       const uploadInput = document.getElementById('file-upload');
       if (uploadInput) {
         uploadInput.addEventListener('change', async () => {
@@ -783,6 +1000,7 @@ async function filesTab(ctx, data) {
             }
           }
           load(state.path);
+          refreshTree();
         });
       }
       const host = document.querySelector('#tab-host');
@@ -797,7 +1015,7 @@ async function filesTab(ctx, data) {
               toast('Загружено', file.name, 'ok', 2000);
             } catch (err) { toast('Ошибка загрузки', `${file.name}: ${err.message}`, 'err'); }
           }
-          if (files.length) load(state.path);
+          if (files.length) { load(state.path); refreshTree(); }
         });
       }
     },

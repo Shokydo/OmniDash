@@ -167,6 +167,7 @@ function newUser({ username, email, role = 'user', passwordHash, hash, salt, lim
     limits: { ...data.settings.defaultLimits, ...(limits || {}) },
     apiKeys: [],
     avatarColor: ['#262626', '#404040', '#595959', '#737373', '#8c8c8c', '#a6a6a6'][Math.floor(Math.random() * 6)],
+    avatarImage: null,
     forcePasswordChange: false,
   };
   data.users.push(user);
